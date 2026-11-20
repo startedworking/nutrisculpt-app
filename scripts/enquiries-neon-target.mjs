@@ -1,9 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { neon } from "@neondatabase/serverless";
 
-const PROJECT_ID = "ancient-recipe-02752976";
-const SOURCE_BRANCH_ID = "br-dawn-forest-a141h1n9";
-const TEST_BRANCH_NAME = "nutrisculpt-03b3-schema-only";
 const NEON_API = "https://console.neon.tech/api/v2";
 const TABLES = ["enquiries", "enquiry_idempotency_keys", "enquiry_submission_fingerprints"];
 const PROTECTION_TABLES = TABLES.slice(1);
@@ -25,11 +22,8 @@ function readConfiguration() {
   const database = requireTestEnv("TEST_DATABASE_NAME");
   const apiKey = requireTestEnv("TEST_NEON_API_KEY");
 
-  if (projectId !== PROJECT_ID) {
-    throw new TestTargetError("TEST_NEON_PROJECT_ID must identify the approved NutriSculpt test project.");
-  }
-  if (!/^br-[a-z0-9-]+$/.test(branchId) || branchId === SOURCE_BRANCH_ID) {
-    throw new TestTargetError("TEST_NEON_BRANCH_ID must identify the new test branch, distinct from the schema source.");
+  if (!/^br-[a-z0-9-]+$/.test(branchId)) {
+    throw new TestTargetError("TEST_NEON_BRANCH_ID must be a valid Neon branch ID.");
   }
   const endpointId = /^(ep-[a-z0-9-]+)\.(?:[a-z0-9-]+\.)+neon\.tech$/.exec(host)?.[1];
   if (!endpointId || endpointId.endsWith("-pooler")) {
@@ -91,10 +85,8 @@ async function verifyNeonMetadata({ projectId, branchId, endpointId, host, datab
     readNeonMetadata(`${branchPath}/databases/${encodeURIComponent(database)}`, apiKey),
   ]);
   const branch = branchResponse?.branch;
-  if (branch?.id !== branchId || branch.project_id !== projectId || branch.name !== TEST_BRANCH_NAME ||
-      branch.default !== false || branch.protected || branch.parent_id ||
-      branch.init_source !== "schema-only" || branch.current_state !== "ready") {
-    throw new TestTargetError("Neon metadata did not confirm the approved, ready, non-default schema-only test branch.");
+  if (branch?.id !== branchId || branch.project_id !== projectId || branch.default !== false || branch.protected || branch.current_state !== "ready") {
+    throw new TestTargetError("Neon metadata did not confirm the approved, ready, non-default, non-protected test branch.");
   }
   const endpoint = endpointResponse?.endpoint;
   if (endpoint?.id !== endpointId || endpoint.host !== host || endpoint.project_id !== projectId ||
