@@ -181,7 +181,7 @@ export default function DashboardClient({ adminEmail }) {
       const res = await fetch("/api/admin/enquiries", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, id }),
+        body: JSON.stringify({ action, id, ...(action === "delete" ? { confirm: "DELETE" } : {}) }),
       });
       const json = await res.json().catch(() => ({}));
       if (res.status === 401) { router.replace("/admin/login"); return; }

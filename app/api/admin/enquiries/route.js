@@ -1,5 +1,5 @@
 ﻿import { NextResponse } from "next/server";
-import { requireAdmin } from "@/lib/admin-auth";
+import { requireAdmin, isSameOriginRequest } from "@/lib/admin-auth";
 import {
   listEnquiries,
   updateEnquiry,
@@ -54,6 +54,9 @@ export async function PATCH(request) {
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  if (!isSameOriginRequest(request)) {
+    return NextResponse.json({ error: "Request rejected." }, { status: 403 });
+  }
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object" || !body.id) {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
@@ -98,6 +101,9 @@ export async function DELETE(request) {
   if (!auth.ok) {
     return NextResponse.json({ error: auth.error }, { status: auth.status });
   }
+  if (!isSameOriginRequest(request)) {
+    return NextResponse.json({ error: "Request rejected." }, { status: 403 });
+  }
   const body = await request.json().catch(() => null);
   if (!body || typeof body !== "object" || !body.id || typeof body.id !== "string") {
     return NextResponse.json({ error: "Invalid request." }, { status: 400 });
@@ -131,6 +137,12 @@ export async function DELETE(request) {
     return res;
   }
   // action === "delete"
+  if (body.confirm !== "DELETE") {
+    return NextResponse.json(
+      { error: "Permanent deletion requires explicit confirmation." },
+      { status: 400 },
+    );
+  }
   result = await deleteEnquiryPermanently(id);
   if (!result) {
     return NextResponse.json({ error: "Enquiry not found or not in Trash." }, { status: 400 });

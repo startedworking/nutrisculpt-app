@@ -4,6 +4,13 @@ import { isAdminConfigured, verifySessionToken } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
+export const metadata = {
+  robots: {
+    index: false,
+    follow: false,
+  },
+};
+
 export default async function AdminLayout({ children }) {
   if (!isAdminConfigured()) {
     // allow login page to show configuration message, but block dashboard usage generally via page checks

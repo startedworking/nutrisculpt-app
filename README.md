@@ -37,7 +37,7 @@ Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/bui
 
 ### Expert Connect enquiries
 
-The enquiry endpoint requires Neon and the schema from `migrations/003_add_idempotency.sql`. With the protection schema missing, valid submissions receive HTTP 503. Set a stable `ENQUIRY_FINGERPRINT_SECRET` shared by all app instances. The endpoint also accepts the existing `ADMIN_SESSION_SECRET` as a fallback.
+The enquiry endpoint requires Neon and the schema from `migrations/003_add_idempotency.sql`. With the protection schema missing, valid submissions receive HTTP 503. Set a stable, dedicated `ENQUIRY_FINGERPRINT_SECRET` shared by all app instances. In production this secret is required and is not replaced by `ADMIN_SESSION_SECRET`; without it, submissions fail closed with HTTP 503.
 
 The form generates an `idempotencyKey` for each submission and sends it again on retries. Direct API callers must send a random key of up to 128 printable ASCII characters without spaces, and reuse it when retrying the same submission.
 

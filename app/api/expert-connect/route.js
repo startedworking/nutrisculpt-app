@@ -2,7 +2,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { isIP } from "node:net";
 import { NextResponse } from "next/server";
 import { ENQUIRY_CATEGORY_ALLOWLIST, ENQUIRY_SERVICE_OPTIONS, GOAL_ALLOWLIST } from "@/constants/services";
-import { createEnquiry } from "@/lib/enquiries";
+import { createEnquiry, resolveFingerprintSecret } from "@/lib/enquiries";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const PHONE_RE = /^[0-9][0-9\s()-]{5,20}$/;
@@ -194,7 +194,7 @@ export async function POST(request) {
       status: "new",
     };
 
-    const fingerprintSecret = process.env.ENQUIRY_FINGERPRINT_SECRET || process.env.ADMIN_SESSION_SECRET;
+    const fingerprintSecret = resolveFingerprintSecret();
     if (!fingerprintSecret) return unavailableResponse();
 
     let created;
