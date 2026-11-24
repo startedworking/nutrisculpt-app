@@ -25,14 +25,20 @@ import HealthDisclaimer from "@/components/atoms/HealthDisclaimer";
 const round1 = (value) => Math.round(value * 10) / 10;
 
 function TransformationForm() {
+  // Canonical internal units (source of truth): weight → kg, height → cm, waist → cm.
+  // null means blank / not yet provided. These persist across unit toggles so
+  // physical quantities never drift through repeated display conversions.
+  const [canonical, setCanonical] = useState({
+    weightKg: null,
+    heightCm: null,
+    waistCm: null,
+  });
   const [unitSystem, setUnitSystem] = useState("metric");
+
+  // Categorical / non-measurement form fields (unchanged semantics).
   const [form, setForm] = useState({
     gender: "",
     age: "",
-    weight: "",
-    height: "",
-    heightIn: "",
-    waist: "",
     activity: "",
     primaryGoal: "",
     aerobicActivity: "",
@@ -40,6 +46,11 @@ function TransformationForm() {
     strengthFrequency: "",
     healthConsiderations: "no",
   });
+
+  // Raw imperial height display strings (feet / inches are two separate inputs).
+  const [heightFt, setHeightFt] = useState("");
+  const [heightIn, setHeightIn] = useState("");
+
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState({});
   const [selectedServiceCategory, setSelectedServiceCategory] = useState("");
@@ -59,67 +70,69 @@ function TransformationForm() {
     }
   };
 
+  // ---------------------------------------------------------------------------
+  // Measurement handlers: update canonical value from the current display unit.
+  // ---------------------------------------------------------------------------
+
   const handleWeightChange = (value) => {
-    setForm((f) => ({ ...f, weight: value }));
-    if (errors.weight) {
-      setErrors((e) => ({ ...e, weight: null }));
+    const num = parseFloat(value);
+    if (value === "" || !Number.isFinite(num) || num < 0) {
+      setCanonical((p) => ({ ...p, weightKg: null }));
+      return;
     }
+    const kg = unitSystem === "metric" ? num : lbToKgExact(num);
+    setCanonical((p) => ({ ...p, weightKg: kg }));
   };
 
   const handleHeightChange = (value) => {
-    setForm((f) => ({ ...f, height: value }));
-    if (errors.height) {
-      setErrors((e) => ({ ...e, height: null }));
+    // Metric height input (cm).
+    const num = parseFloat(value);
+    if (value === "" || !Number.isFinite(num) || num <= 0) {
+      setCanonical((p) => ({ ...p, heightCm: null }));
+      return;
     }
+    setCanonical((p) => ({ ...p, heightCm: num }));
+  };
+
+  const handleHeightFtChange = (value) => {
+    setHeightFt(value);
+    const ft = parseFloat(value);
+    const inVal = parseFloat(heightIn);
+    if (value === "" || heightIn === "" || !Number.isFinite(ft) || !Number.isFinite(inVal)) {
+      setCanonical((p) => ({ ...p, heightCm: null }));
+      return;
+    }
+    setCanonical((p) => ({ ...p, heightCm: feetInchesToCm(ft, inVal) }));
   };
 
   const handleHeightInChange = (value) => {
-    setForm((f) => ({ ...f, heightIn: value }));
-    if (errors.height) {
-      setErrors((e) => ({ ...e, height: null }));
+    setHeightIn(value);
+    const ft = parseFloat(heightFt);
+    const inVal = parseFloat(value);
+    if (heightFt === "" || value === "" || !Number.isFinite(ft) || !Number.isFinite(inVal)) {
+      setCanonical((p) => ({ ...p, heightCm: null }));
+      return;
     }
+    setCanonical((p) => ({ ...p, heightCm: feetInchesToCm(ft, inVal) }));
   };
 
   const handleWaistChange = (value) => {
-    setForm((f) => ({ ...f, waist: value }));
-    if (errors.waist) {
-      setErrors((e) => ({ ...e, waist: null }));
+    const num = parseFloat(value);
+    if (value === "" || !Number.isFinite(num) || num < 0) {
+      setCanonical((p) => ({ ...p, waistCm: null }));
+      return;
     }
+    const cm = unitSystem === "metric" ? num : inToCm(num);
+    setCanonical((p) => ({ ...p, waistCm: cm }));
   };
+
+  // ---------------------------------------------------------------------------
+  // Unit system toggle: canonical values persist, only the display unit changes.
+  // No conversion of an already-rounded display value, so no rounding drift.
+  // ---------------------------------------------------------------------------
 
   const handleUnitChange = (newSystem) => {
     if (newSystem === unitSystem) return;
-    setForm((f) => {
-      const nf = { ...f };
-      const w = parseFloat(f.weight);
-      if (Number.isFinite(w) && w >= 0) {
-        nf.weight = unitSystem === "metric"
-          ? String(round1(kgToLbExact(w)))
-          : String(round1(lbToKgExact(w)));
-      }
-      if (unitSystem === "metric" && newSystem === "imperial") {
-        const h = parseFloat(f.height);
-        if (Number.isFinite(h) && h >= 0) {
-          const { ft, inches } = cmToFeetInches(h);
-          nf.height = String(ft);
-          nf.heightIn = String(round1(inches));
-        }
-      } else if (unitSystem === "imperial" && newSystem === "metric") {
-        const ft = parseFloat(f.height) || 0;
-        const inVal = parseFloat(f.heightIn) || 0;
-        if (f.height !== "" || f.heightIn !== "") {
-          nf.height = String(feetInchesToCm(ft, inVal));
-          nf.heightIn = "";
-        }
-      }
-      const waist = parseFloat(f.waist);
-      if (Number.isFinite(waist) && waist >= 0) {
-        nf.waist = unitSystem === "metric"
-          ? String(round1(cmToIn(waist)))
-          : String(round1(inToCm(waist)));
-      }
-      return nf;
-    });
     setUnitSystem(newSystem);
   };
 
@@ -130,6 +143,38 @@ function TransformationForm() {
       router.push("/");
     }
   };
+
+  // ---------------------------------------------------------------------------
+  // Derived display representations (computed from canonical at render time).
+  // ---------------------------------------------------------------------------
+
+  const weightDisplay =
+    canonical.weightKg == null
+      ? ""
+      : unitSystem === "metric"
+        ? String(round1(canonical.weightKg))
+        : String(round1(kgToLbExact(canonical.weightKg)));
+
+  const waistDisplay =
+    canonical.waistCm == null
+      ? ""
+      : unitSystem === "metric"
+        ? String(round1(canonical.waistCm))
+        : String(round1(cmToIn(canonical.waistCm)));
+
+  const heightMetricDisplay = canonical.heightCm == null ? "" : String(round1(canonical.heightCm));
+
+  let heightImperialFt = "";
+  let heightImperialIn = "";
+  if (canonical.heightCm != null) {
+    const { ft, inches } = cmToFeetInches(canonical.heightCm);
+    heightImperialFt = String(ft);
+    heightImperialIn = String(round1(inches));
+  }
+
+  // ---------------------------------------------------------------------------
+  // Validation foundation: operates on canonical values plus active unit.
+  // ---------------------------------------------------------------------------
 
   const validateForm = () => {
     const newErrors = {};
@@ -147,56 +192,55 @@ function TransformationForm() {
       newErrors.activity = "Please select your general activity level.";
     }
 
-    const wVal = parseFloat(form.weight);
-    if (!form.weight || !Number.isFinite(wVal) || wVal <= 0) {
+    const weightKg = canonical.weightKg;
+    if (weightKg == null) {
       newErrors.weight = unitSystem === "metric"
         ? "Please enter a valid weight (kg)"
         : "Please enter a valid weight (lb)";
-    } else if (unitSystem === "metric" && (wVal < 20 || wVal > 300)) {
-      newErrors.weight = "Please enter a valid weight (20-300 kg)";
-    } else if (unitSystem === "imperial" && (wVal < 44 || wVal > 661)) {
-      newErrors.weight = "Please enter a valid weight (44-661 lb)";
+    } else if (weightKg < 20 || weightKg > 300) {
+      newErrors.weight = unitSystem === "metric"
+        ? "Please enter a valid weight (20-300 kg)"
+        : "Please enter a valid weight (approx. 44-661 lb)";
     }
 
+    const heightCm = canonical.heightCm;
     if (unitSystem === "metric") {
-      const hVal = parseFloat(form.height);
-      if (!form.height || !Number.isFinite(hVal) || hVal <= 0) {
+      if (heightCm == null) {
         newErrors.height = "Please enter a valid height (cm)";
-      } else if (hVal < 50 || hVal > 250) {
+      } else if (heightCm < 50 || heightCm > 250) {
         newErrors.height = "Please enter a valid height (50-250 cm)";
       }
     } else {
-      if (form.height === "" || form.heightIn === "") {
+      const ftVal = parseFloat(heightFt);
+      const inVal = parseFloat(heightIn);
+      if (heightFt === "" || heightIn === "") {
         newErrors.height = "Please enter both feet and inches";
+      } else if (
+        !Number.isFinite(ftVal) ||
+        !Number.isFinite(inVal) ||
+        ftVal < 0 ||
+        inVal < 0 ||
+        inVal >= 12
+      ) {
+        newErrors.height = "Please enter valid feet and inches (0-11)";
       } else {
-        const ft = parseFloat(form.height);
-        const inVal = parseFloat(form.heightIn);
-        if (
-          !Number.isFinite(ft) ||
-          !Number.isFinite(inVal) ||
-          ft < 0 ||
-          inVal < 0 ||
-          inVal >= 12
-        ) {
-          newErrors.height = "Please enter valid feet and inches";
-        } else {
-          const totalCm = feetInchesToCm(ft, inVal);
-          if (totalCm < 50 || totalCm > 250) {
-            newErrors.height =
-              "Please enter a valid height (50-250 cm / approx. 1'8\"-8'2\")";
-          }
+        const totalCm = feetInchesToCm(ftVal, inVal);
+        if (totalCm < 50 || totalCm > 250) {
+          newErrors.height =
+            "Please enter a valid height (50-250 cm / approx. 1'8\"-8'2\")";
         }
       }
     }
 
-    if (form.waist !== "") {
-      const waistVal = parseFloat(form.waist);
-      if (!Number.isFinite(waistVal) || waistVal <= 0) {
+    const waistCm = canonical.waistCm;
+    if (waistCm != null) {
+      if (waistCm <= 0) {
         newErrors.waist = "Please enter a valid waist circumference";
-      } else if (unitSystem === "metric" && (waistVal < 40 || waistVal > 200)) {
+      } else if (unitSystem === "metric" && (waistCm < 40 || waistCm > 200)) {
         newErrors.waist = "Please enter a valid waist (40-200 cm)";
-      } else if (unitSystem === "imperial" && (waistVal < 16 || waistVal > 79)) {
-        newErrors.waist = "Please enter a valid waist (16-79 in)";
+      } else if (unitSystem === "imperial" && (waistCm < 40 || waistCm > 200)) {
+        // Canonical is cm; express the metric bounds in inches for the message.
+        newErrors.waist = "Please enter a valid waist (approx. 16-79 in)";
       }
     }
 
@@ -217,8 +261,13 @@ function TransformationForm() {
     setSubmitted(false);
     setErrors({});
     setSelectedServiceCategory("");
+    setCanonical({ weightKg: null, heightCm: null, waistCm: null });
+    setHeightFt("");
+    setHeightIn("");
+    setUnitSystem("metric");
   };
 
+  // Activity level options
   const ACTIVITY_LEVELS = [
     { value: "sedentary", label: "Sedentary", description: "Mostly seated, minimal everyday movement" },
     { value: "light", label: "Lightly active", description: "Some daily movement and light activity" },
@@ -267,38 +316,13 @@ function TransformationForm() {
     { value: "prefer_not", label: "Prefer not to say" },
   ];
 
-  const weightVal = parseFloat(form.weight);
-  const weightKg =
-    form.weight !== "" && Number.isFinite(weightVal) && weightVal > 0
-      ? unitSystem === "metric"
-        ? weightVal
-        : lbToKgExact(weightVal)
-      : null;
+  // ---------------------------------------------------------------------------
+  // Canonical payload fed into the existing calculation logic (single path).
+  // ---------------------------------------------------------------------------
 
-  let heightCm = null;
-  if (unitSystem === "metric") {
-    const hVal = parseFloat(form.height);
-    if (form.height !== "" && Number.isFinite(hVal) && hVal > 0) {
-      heightCm = hVal;
-    }
-  } else {
-    if (form.height !== "" && form.heightIn !== "") {
-      const ft = parseFloat(form.height);
-      const inVal = parseFloat(form.heightIn);
-      if (Number.isFinite(ft) && Number.isFinite(inVal) && ft >= 0 && inVal >= 0) {
-        heightCm = feetInchesToCm(ft, inVal);
-      }
-    }
-  }
-
-  const waistVal = parseFloat(form.waist);
-  const waistCm =
-    form.waist !== "" && Number.isFinite(waistVal) && waistVal > 0
-      ? unitSystem === "metric"
-        ? waistVal
-        : inToCm(waistVal)
-      : null;
-
+  const weightKg = canonical.weightKg;
+  const heightCm = canonical.heightCm;
+  const waistCm = canonical.waistCm;
   const ageNum = parseFloat(form.age);
 
   const h = heightCm ? heightCm / 100 : 0;
@@ -546,8 +570,8 @@ function TransformationForm() {
                     id="transformation-height"
                     type="number"
                     name="height"
-                    value={form.height}
-                    onChange={handleHeightChange}
+                    value={heightMetricDisplay}
+                    onChange={(e) => handleHeightChange(e.target.value)}
                     min="50"
                     max="250"
                     placeholder="e.g., 175"
@@ -561,8 +585,8 @@ function TransformationForm() {
                       id="transformation-height-ft"
                       type="number"
                       name="heightFt"
-                      value={form.height}
-                      onChange={handleHeightChange}
+                      value={heightImperialFt}
+                      onChange={(e) => handleHeightFtChange(e.target.value)}
                       min="0"
                       step="1"
                       placeholder="e.g., 5"
@@ -574,8 +598,8 @@ function TransformationForm() {
                       id="transformation-height-in"
                       type="number"
                       name="heightIn"
-                      value={form.heightIn}
-                      onChange={handleHeightInChange}
+                      value={heightImperialIn}
+                      onChange={(e) => handleHeightInChange(e.target.value)}
                       min="0"
                       max="11"
                       step="0.1"
@@ -604,8 +628,8 @@ function TransformationForm() {
                   id="transformation-weight"
                   type="number"
                   name="weight"
-                  value={form.weight}
-                  onChange={handleWeightChange}
+                  value={weightDisplay}
+                  onChange={(e) => handleWeightChange(e.target.value)}
                   min="20"
                   max="300"
                   step="0.1"
@@ -809,8 +833,8 @@ function TransformationForm() {
                     id="transformation-waist"
                     type="number"
                     name="waist"
-                    value={form.waist}
-                    onChange={handleWaistChange}
+                    value={waistDisplay}
+                    onChange={(e) => handleWaistChange(e.target.value)}
                     min="40"
                     max="200"
                     step="0.1"
@@ -1077,7 +1101,7 @@ function TransformationForm() {
                   <strong>Body Measurements:</strong> Your BMI of {bmi > 0 ? bmi.toFixed(1) : "—"} 
                   {bmiCategory ? `(${bmiCategory})` : ""} is a screening measure, not a direct measure of body fat or fitness. 
                   Your weight-for-height reference range of {idealWeightMin > 0 ? `${idealWeightMin.toFixed(1)}–${idealWeightMax.toFixed(1)} kg` : "—"} 
-                  is based on the adult BMI interval 18.5–24.9. 
+                  is based on the adult BMI interval 18.5–24.9.
                   {waistToHeightRatio ? `Your waist-to-height ratio of ${waistToHeightRatio} ` : "Waist-to-height ratio was not calculated (optional waist measurement not provided)."}
                   <strong>Physical Activity:</strong> Your reported aerobic activity ({form.aerobicActivity ? AEROBIC_DURATION_OPTIONS.find((o) => o.value === form.aerobicActivity)?.label.toLowerCase() : "not provided"})
                   and strength training frequency ({form.strengthFrequency ? STRENGTH_FREQUENCY_OPTIONS.find((o) => o.value === form.strengthFrequency)?.label.toLowerCase() : "not provided"})
