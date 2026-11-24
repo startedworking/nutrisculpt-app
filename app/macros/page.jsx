@@ -16,6 +16,7 @@ import {
   calculateMacros,
   MACRO_PRESETS,
   ACTIVITY_LEVELS,
+  parseFiniteNumber,
 } from "@/lib/calculators";
 
 // Utility functions
@@ -39,48 +40,83 @@ const conversions = {
 
 export default function MacroCalculator() {
   const [unitSystem, setUnitSystem] = useState("metric");
-  const [gender, setGender] = useState("male");
-  const [age, setAge] = useState(25);
-  const [activityLevel, setActivityLevel] = useState(1.375);
-  const [calories, setCalories] = useState(2000);
+  // No calculation-affecting defaults: every input starts blank/unselected.
+  const [gender, setGender] = useState("");
+  const [age, setAge] = useState(null);
+  const [activityLevel, setActivityLevel] = useState(null);
+  const [calories, setCalories] = useState(null);
   const [useCalculatedCalories, setUseCalculatedCalories] = useState(true);
   const [selectedPreset, setSelectedPreset] = useState("Balanced");
-  const [customMacros, setCustomMacros] = useState({ protein: 25, carbs: 45, fat: 30 });
+  const [customMacros, setCustomMacros] = useState({
+    protein: null,
+    carbs: null,
+    fat: null,
+  });
 
-  // Store both metric and imperial values
-  const [weight, setWeight] = useState({ kg: 70, lb: 154.3 });
-  const [height, setHeight] = useState({ cm: 170, ft: 5, in: 7 });
+  // Store both metric and imperial values; null = blank / not provided.
+  const [weight, setWeight] = useState({ kg: null, lb: null });
+  const [height, setHeight] = useState({ cm: null, ft: null, in: null });
 
   // Share functionality
   const { shareableCardRef, generateImage, generateShareData, validateResultForPrivacy } = useShareableImage('macros');
 
-  // Weight handlers
+  // Weight handlers — convert only finite values; blank clears the pair.
   const handleWeightChange = (value, unit) => {
+    const parsed = parseFiniteNumber(value);
+    if (parsed == null) {
+      setWeight({ kg: null, lb: null });
+      return;
+    }
     if (unit === "kg") {
-      setWeight({ kg: value, lb: conversions.kgToLb(value) });
+      setWeight({ kg: parsed, lb: conversions.kgToLb(parsed) });
     } else {
-      setWeight({ kg: conversions.lbToKg(value), lb: value });
+      setWeight({ kg: conversions.lbToKg(parsed), lb: parsed });
     }
   };
 
-  // Height handlers
+  // Height handlers — convert only finite values; partial ft/in stays blank.
   const handleHeightChange = (value, unit) => {
+    const parsed = parseFiniteNumber(value);
+    if (parsed == null) {
+      setHeight({ cm: null, ft: null, in: null });
+      return;
+    }
     if (unit === "cm") {
-      const ftIn = conversions.cmToFtIn(value);
-      setHeight({ cm: value, ft: ftIn.ft, in: ftIn.in });
+      const ftIn = conversions.cmToFtIn(parsed);
+      setHeight({ cm: parsed, ft: ftIn.ft, in: ftIn.in });
     } else if (unit === "ft") {
-      const cm = conversions.ftInToCm(value, height.in);
-      setHeight({ cm, ft: value, in: height.in });
+      if (height.in == null) {
+        setHeight({ cm: null, ft: parsed, in: null });
+        return;
+      }
+      const cm = conversions.ftInToCm(parsed, height.in);
+      setHeight({ cm, ft: parsed, in: height.in });
     } else if (unit === "in") {
-      const cm = conversions.ftInToCm(height.ft, value);
-      setHeight({ cm, ft: height.ft, in: value });
+      if (height.ft == null) {
+        setHeight({ cm: null, ft: null, in: parsed });
+        return;
+      }
+      const cm = conversions.ftInToCm(height.ft, parsed);
+      setHeight({ cm, ft: height.ft, in: parsed });
     }
   };
 
-  // Calculate TDEE using verified helpers
+  // Calculate TDEE using verified helpers. Returns null until every required
+  // input is valid; never lets NaN/Infinity reach rendering.
   const calculatedCalories = useMemo(() => {
+    if (
+      weight.kg == null ||
+      height.cm == null ||
+      age == null ||
+      !gender ||
+      activityLevel == null
+    ) {
+      return null;
+    }
     const bmr = calculateBMR(weight.kg, height.cm, age, gender);
+    if (bmr == null) return null;
     const tdee = calculateTDEE(bmr, activityLevel);
+    if (tdee == null) return null;
     return round(tdee);
   }, [weight.kg, height.cm, age, gender, activityLevel]);
 
@@ -92,25 +128,43 @@ export default function MacroCalculator() {
     return MACRO_PRESETS.find(preset => preset.name === selectedPreset) || MACRO_PRESETS[0];
   }, [selectedPreset, customMacros]);
 
-  // Calculate macro breakdown using verified helper
+  const totalPercentage =
+    currentMacros.protein == null ||
+    currentMacros.carbs == null ||
+    currentMacros.fat == null
+      ? null
+      : currentMacros.protein + currentMacros.carbs + currentMacros.fat;
+
+  // Calculate macro breakdown using verified helper. Null when inputs invalid.
   const macroBreakdown = useMemo(() => {
     const totalCalories = useCalculatedCalories ? calculatedCalories : calories;
-    return calculateMacros(totalCalories, currentMacros);
-  }, [calculatedCalories, calories, useCalculatedCalories, currentMacros]);
+    if (totalCalories == null) return null;
+    if (selectedPreset === "Custom") {
+      if (
+        customMacros.protein == null ||
+        customMacros.carbs == null ||
+        customMacros.fat == null
+      ) {
+        return null;
+      }
+      return calculateMacros(totalCalories, customMacros);
+    }
+    const preset = MACRO_PRESETS.find(preset => preset.name === selectedPreset);
+    if (!preset) return null;
+    return calculateMacros(totalCalories, preset);
+  }, [calculatedCalories, calories, useCalculatedCalories, customMacros, selectedPreset]);
 
   const handleMacroChange = (macro, value) => {
     setCustomMacros(prev => ({
       ...prev,
-      [macro]: value
+      [macro]: parseFiniteNumber(value),
     }));
   };
-
-  const totalPercentage = currentMacros.protein + currentMacros.carbs + currentMacros.fat;
 
   // Prepare share data for macro results
   const shareResult = useMemo(() => {
     if (!macroBreakdown || totalPercentage !== 100) return null;
-    
+
     return validateResultForPrivacy({
       protein: macroBreakdown.protein.grams,
       carbs: macroBreakdown.carbs.grams,
@@ -130,6 +184,18 @@ export default function MacroCalculator() {
     return await generateImage();
   };
 
+  const macroValue = (macro) =>
+    macroBreakdown ? macroBreakdown[macro].grams : "—";
+  const macroCalories = (macro) =>
+    macroBreakdown ? macroBreakdown[macro].calories : "—";
+  const macroPct = (macro) =>
+    macroBreakdown ? macroBreakdown[macro].percentage : "—";
+  const barWidth = (macro) =>
+    macroBreakdown ? macroBreakdown[macro].percentage : 0;
+  const perKg = macroBreakdown && weight.kg
+    ? round(macroBreakdown.protein.grams / weight.kg, 1)
+    : null;
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
       <motion.div
@@ -145,7 +211,7 @@ export default function MacroCalculator() {
           Calculate your daily macronutrient distribution
         </p>
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Example values shown — enter your own data for personalized results
+          Enter your own data for personalized results
         </p>
       </motion.div>
 
@@ -199,7 +265,7 @@ export default function MacroCalculator() {
               {/* Basic Information */}
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold">Basic Information</h3>
-                
+
                 {/* Gender Selection */}
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -222,13 +288,18 @@ export default function MacroCalculator() {
                       </label>
                     ))}
                   </div>
+                  {!gender && (
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+                      Please select your gender.
+                    </p>
+                  )}
                 </div>
 
                 {/* Age */}
                 <InputField
                   label="Age"
-                  value={age}
-                  onChange={setAge}
+                  value={age == null ? "" : age}
+                  onChange={(value) => setAge(parseFiniteNumber(value))}
                   type="number"
                   placeholder="25"
                   min="1"
@@ -238,7 +309,7 @@ export default function MacroCalculator() {
                 {/* Weight */}
                 <InputField
                   label={`Weight (${unitSystem === "metric" ? "kg" : "lbs"})`}
-                  value={unitSystem === "metric" ? weight.kg : weight.lb}
+                  value={unitSystem === "metric" ? (weight.kg == null ? "" : weight.kg) : (weight.lb == null ? "" : weight.lb)}
                   onChange={(value) =>
                     handleWeightChange(
                       value,
@@ -254,7 +325,7 @@ export default function MacroCalculator() {
                 {unitSystem === "metric" ? (
                   <InputField
                     label="Height (cm)"
-                    value={height.cm}
+                    value={height.cm == null ? "" : height.cm}
                     onChange={(value) => handleHeightChange(value, "cm")}
                     type="number"
                     placeholder="170"
@@ -265,7 +336,7 @@ export default function MacroCalculator() {
                     <div className="flex-1">
                       <InputField
                         label="Height (ft)"
-                        value={height.ft}
+                        value={height.ft == null ? "" : height.ft}
                         onChange={(value) => handleHeightChange(value, "ft")}
                         type="number"
                         placeholder="5"
@@ -275,7 +346,7 @@ export default function MacroCalculator() {
                     <div className="flex-1">
                       <InputField
                         label="Height (in)"
-                        value={height.in}
+                        value={height.in == null ? "" : height.in}
                         onChange={(value) => handleHeightChange(value, "in")}
                         type="number"
                         placeholder="7"
@@ -295,20 +366,27 @@ export default function MacroCalculator() {
                     Activity Level
                   </label>
                   <select
-                    value={activityLevel}
-                    onChange={(e) => setActivityLevel(parseFloat(e.target.value))}
+                    value={activityLevel == null ? "" : activityLevel}
+                    onChange={(e) => setActivityLevel(parseFiniteNumber(e.target.value))}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                   >
+                    <option value="">Select activity level</option>
                     {ACTIVITY_LEVELS.map((level) => (
                       <option key={level.value} value={level.value}>
                         {level.label} - {level.description}
                       </option>
                     ))}
                   </select>
+                  {activityLevel == null && (
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+                      Please select your activity level.
+                    </p>
+                  )}
                 </div>
                 <div className="rounded-lg bg-blue-50 p-4 text-center dark:bg-blue-950/40">
                   <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
-                    Calculated Daily Calories: {calculatedCalories}
+                    Calculated Daily Calories:{" "}
+                    {calculatedCalories != null ? calculatedCalories : "—"}
                   </p>
                 </div>
               </div>
@@ -318,12 +396,17 @@ export default function MacroCalculator() {
           <div className="max-w-md mx-auto">
             <InputField
               label="Daily Calorie Target"
-              value={calories}
-              onChange={setCalories}
+              value={calories == null ? "" : calories}
+              onChange={(value) => setCalories(parseFiniteNumber(value))}
               type="number"
               placeholder="2000"
               min="1"
             />
+            {calories == null && (
+              <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+                Please enter a daily calorie target.
+              </p>
+            )}
           </div>
         )}
 
@@ -352,7 +435,7 @@ export default function MacroCalculator() {
             <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-3">
               <InputField
                 label="Protein %"
-                value={customMacros.protein}
+                value={customMacros.protein == null ? "" : customMacros.protein}
                 onChange={(value) => handleMacroChange("protein", value)}
                 type="number"
                 min="1"
@@ -361,7 +444,7 @@ export default function MacroCalculator() {
               />
               <InputField
                 label="Carbohydrates %"
-                value={customMacros.carbs}
+                value={customMacros.carbs == null ? "" : customMacros.carbs}
                 onChange={(value) => handleMacroChange("carbs", value)}
                 type="number"
                 min="1"
@@ -370,7 +453,7 @@ export default function MacroCalculator() {
               />
               <InputField
                 label="Fat %"
-                value={customMacros.fat}
+                value={customMacros.fat == null ? "" : customMacros.fat}
                 onChange={(value) => handleMacroChange("fat", value)}
                 type="number"
                 min="1"
@@ -380,7 +463,7 @@ export default function MacroCalculator() {
             </div>
           )}
 
-          {selectedPreset === "Custom" && totalPercentage !== 100 && (
+          {selectedPreset === "Custom" && totalPercentage !== null && totalPercentage !== 100 && (
             <div className="mt-4 rounded-lg bg-amber-100 p-3 text-center dark:bg-amber-900/30">
               <p className="text-sm text-amber-800 dark:text-amber-200">
                 Total: {totalPercentage}% (should equal 100%)
@@ -401,90 +484,98 @@ export default function MacroCalculator() {
       </motion.div>
 
       {/* Results Section */}
-      <div className="mt-8 grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-        {/* Protein */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.4 }}
-          className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
-        >
-          <div className="text-center">
-            <h3 className="mb-4 text-lg font-semibold">Protein</h3>
-            <div className="mb-4">
-              <p className="text-4xl font-extrabold tracking-tight text-red-600 dark:text-red-400">
-                {macroBreakdown.protein.grams}g
-              </p>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                {macroBreakdown.protein.calories} calories ({macroBreakdown.protein.percentage}%)
-              </p>
+      {macroBreakdown ? (
+        <div className="mt-8 grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+          {/* Protein */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.4 }}
+            className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
+          >
+            <div className="text-center">
+              <h3 className="mb-4 text-lg font-semibold">Protein</h3>
+              <div className="mb-4">
+                <p className="text-4xl font-extrabold tracking-tight text-red-600 dark:text-red-400">
+                  {macroValue("protein")}g
+                </p>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                  {macroCalories("protein")} calories ({macroPct("protein")}%)
+                </p>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                <div
+                  className="bg-red-600 h-2 rounded-full dark:bg-red-400"
+                  style={{ width: `${barWidth("protein")}%` }}
+                ></div>
+              </div>
+              {perKg != null && (
+                <p className="mt-3 text-xs text-gray-500 dark:text-gray-400 text-center">
+                  ≈ {perKg} g per kg body weight
+                </p>
+              )}
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
-              <div 
-                className="bg-red-600 h-2 rounded-full dark:bg-red-400" 
-                style={{ width: `${macroBreakdown.protein.percentage}%` }}
-              ></div>
-            </div>
-            {weight.kg && (
-              <p className="mt-3 text-xs text-gray-500 dark:text-gray-400 text-center">
-                ≈ {round(macroBreakdown.protein.grams / weight.kg, 1)} g per kg body weight
-              </p>
-            )}
-          </div>
-        </motion.div>
+          </motion.div>
 
-        {/* Carbohydrates */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.5 }}
-          className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
-        >
-          <div className="text-center">
-            <h3 className="mb-4 text-lg font-semibold">Carbohydrates</h3>
-            <div className="mb-4">
-              <p className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-400">
-                {macroBreakdown.carbs.grams}g
-              </p>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                {macroBreakdown.carbs.calories} calories ({macroBreakdown.carbs.percentage}%)
-              </p>
+          {/* Carbohydrates */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.5 }}
+            className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
+          >
+            <div className="text-center">
+              <h3 className="mb-4 text-lg font-semibold">Carbohydrates</h3>
+              <div className="mb-4">
+                <p className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-400">
+                  {macroValue("carbs")}g
+                </p>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                  {macroCalories("carbs")} calories ({macroPct("carbs")}%)
+                </p>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                <div
+                  className="bg-blue-600 h-2 rounded-full dark:bg-blue-400"
+                  style={{ width: `${barWidth("carbs")}%` }}
+                ></div>
+              </div>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
-              <div 
-                className="bg-blue-600 h-2 rounded-full dark:bg-blue-400" 
-                style={{ width: `${macroBreakdown.carbs.percentage}%` }}
-              ></div>
-            </div>
-          </div>
-        </motion.div>
+          </motion.div>
 
-        {/* Fat */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.6 }}
-          className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
-        >
-          <div className="text-center">
-            <h3 className="mb-4 text-lg font-semibold">Fat</h3>
-            <div className="mb-4">
-              <p className="text-4xl font-extrabold tracking-tight text-yellow-600 dark:text-yellow-400">
-                {macroBreakdown.fat.grams}g
-              </p>
-              <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                {macroBreakdown.fat.calories} calories ({macroBreakdown.fat.percentage}%)
-              </p>
+          {/* Fat */}
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.6 }}
+            className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
+          >
+            <div className="text-center">
+              <h3 className="mb-4 text-lg font-semibold">Fat</h3>
+              <div className="mb-4">
+                <p className="text-4xl font-extrabold tracking-tight text-yellow-600 dark:text-yellow-400">
+                  {macroValue("fat")}g
+                </p>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                  {macroCalories("fat")} calories ({macroPct("fat")}%)
+                </p>
+              </div>
+              <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                <div
+                  className="bg-yellow-600 h-2 rounded-full dark:bg-yellow-400"
+                  style={{ width: `${barWidth("fat")}%` }}
+                ></div>
+              </div>
             </div>
-            <div className="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
-              <div 
-                className="bg-yellow-600 h-2 rounded-full dark:bg-yellow-400" 
-                style={{ width: `${macroBreakdown.fat.percentage}%` }}
-              ></div>
-            </div>
-          </div>
-        </motion.div>
-      </div>
+          </motion.div>
+        </div>
+      ) : (
+        <div className="mt-8 rounded-xl bg-gray-50 p-8 text-center dark:bg-gray-800/50">
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            Complete your details above to see your macro breakdown.
+          </p>
+        </div>
+      )}
 
       {/* Educational explanation */}
       <div className="mt-6">
@@ -535,13 +626,15 @@ export default function MacroCalculator() {
           </div>
           <div className="flex justify-center px-2 sm:px-4">
             <div className="w-full max-w-xs sm:max-w-sm transform hover:scale-105 transition-transform duration-300">
-              <ResultCard
-                type="macro"
-                value={`${shareResult.protein}g • ${shareResult.carbs}g • ${shareResult.fat}g`}
-                category={shareResult.preset}
-                subtitle={`Protein • Carbs • Fat | ${shareResult.totalCalories} calories/day`}
-                aspectRatio="square"
-              />
+              <div className="w-full max-w-xs sm:max-w-sm transform hover:scale-105 transition-transform duration-300">
+                <ResultCard
+                  type="macro"
+                  value={`${shareResult.protein}g • ${shareResult.carbs}g • ${shareResult.fat}g`}
+                  category={shareResult.preset}
+                  subtitle={`Protein • Carbs • Fat | ${shareResult.totalCalories} calories/day`}
+                  aspectRatio="square"
+                />
+              </div>
             </div>
           </div>
           <div className="text-center mt-6">
@@ -556,49 +649,51 @@ export default function MacroCalculator() {
       )}
 
       {/* Meal Distribution */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.6, delay: 0.7 }}
-        className="mt-8 rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
-      >
-        <h3 className="mb-6 text-center text-lg font-semibold">
-          Daily Meal Distribution (Example: 3 Meals)
-        </h3>
-        <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-          {["Breakfast", "Lunch", "Dinner"].map((meal) => (
-            <div key={meal} className="rounded-lg bg-gray-50 p-4 dark:bg-gray-700/50">
-              <h4 className="mb-3 text-center font-semibold">{meal}</h4>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span>Protein:</span>
-                  <span className="font-medium text-red-600 dark:text-red-400">
-                    {round(macroBreakdown.protein.grams / 3)}g
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Carbs:</span>
-                  <span className="font-medium text-blue-600 dark:text-blue-400">
-                    {round(macroBreakdown.carbs.grams / 3)}g
-                  </span>
-                </div>
-                <div className="flex justify-between">
-                  <span>Fat:</span>
-                  <span className="font-medium text-yellow-600 dark:text-yellow-400">
-                    {round(macroBreakdown.fat.grams / 3)}g
-                  </span>
-                </div>
-                <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600">
-                  <div className="flex justify-between font-semibold">
-                    <span>Calories:</span>
-                    <span>{round((useCalculatedCalories ? calculatedCalories : calories) / 3)}</span>
+      {macroBreakdown && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.7 }}
+          className="mt-8 rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
+        >
+          <h3 className="mb-6 text-center text-lg font-semibold">
+            Daily Meal Distribution (Example: 3 Meals)
+          </h3>
+          <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            {["Breakfast", "Lunch", "Dinner"].map((meal) => (
+              <div key={meal} className="rounded-lg bg-gray-50 p-4 dark:bg-gray-700/50">
+                <h4 className="mb-3 text-center font-semibold">{meal}</h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span>Protein:</span>
+                    <span className="font-medium text-red-600 dark:text-red-400">
+                      {round(macroBreakdown.protein.grams / 3)}g
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Carbs:</span>
+                    <span className="font-medium text-blue-600 dark:text-blue-400">
+                      {round(macroBreakdown.carbs.grams / 3)}g
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Fat:</span>
+                    <span className="font-medium text-yellow-600 dark:text-yellow-400">
+                      {round(macroBreakdown.fat.grams / 3)}g
+                    </span>
+                  </div>
+                  <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600">
+                    <div className="flex justify-between font-semibold">
+                      <span>Calories:</span>
+                      <span>{round((useCalculatedCalories ? calculatedCalories : calories) / 3)}</span>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </motion.div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* Tips Section */}
       <motion.div

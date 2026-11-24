@@ -19,6 +19,7 @@ import {
   waterReferenceFor,
   weightBasedEstimate,
   waterUnits,
+  parseFiniteNumber,
 } from "@/lib/calculators.mjs";
 
 // Activity and climate influence fluid needs, but the reference value is not
@@ -75,8 +76,9 @@ const HEALTH_CONDITIONS = [
 
 export default function WaterIntakeCalculator() {
   const [unitSystem, setUnitSystem] = useState("metric");
+  // No calculation-affecting defaults: inputs start blank/unselected.
   const [gender, setGender] = useState("male");
-  const [age, setAge] = useState(25);
+  const [age, setAge] = useState(null);
   const [activityLevel, setActivityLevel] = useState(1.0);
   const [climateCondition, setClimateCondition] = useState(1.0);
   const [isPregnant, setIsPregnant] = useState(false);
@@ -86,15 +88,20 @@ export default function WaterIntakeCalculator() {
   // Share functionality
   const { shareableCardRef, generateImage, generateShareData, validateResultForPrivacy } = useShareableImage('water-intake');
 
-  // Store both metric and imperial values
-  const [weight, setWeight] = useState({ kg: 70, lb: 154.3 });
+  // Store both metric and imperial values; null = blank / not provided.
+  const [weight, setWeight] = useState({ kg: null, lb: null });
 
-  // Weight handlers
+  // Weight handlers — convert only finite values; blank clears the pair.
   const handleWeightChange = (value, unit) => {
+    const parsed = parseFiniteNumber(value);
+    if (parsed == null) {
+      setWeight({ kg: null, lb: null });
+      return;
+    }
     if (unit === "kg") {
-      setWeight({ kg: value, lb: round(kgToLb(value), 1) });
+      setWeight({ kg: parsed, lb: round(kgToLb(parsed), 1) });
     } else {
-      setWeight({ kg: round(lbToKg(value), 1), lb: value });
+      setWeight({ kg: round(lbToKg(parsed), 1), lb: parsed });
     }
   };
 
@@ -248,8 +255,8 @@ export default function WaterIntakeCalculator() {
             {/* Age */}
             <InputField
               label="Age"
-              value={age}
-              onChange={setAge}
+              value={age == null ? "" : age}
+              onChange={(value) => setAge(parseFiniteNumber(value))}
               type="number"
               placeholder="25"
               min="1"
@@ -259,7 +266,7 @@ export default function WaterIntakeCalculator() {
             {/* Weight */}
             <InputField
               label={`Weight (${unitSystem === "metric" ? "kg" : "lbs"})`}
-              value={unitSystem === "metric" ? weight.kg : weight.lb}
+              value={unitSystem === "metric" ? (weight.kg == null ? "" : weight.kg) : (weight.lb == null ? "" : weight.lb)}
               onChange={(value) =>
                 handleWeightChange(
                   value,
@@ -535,8 +542,8 @@ export default function WaterIntakeCalculator() {
           whatItMeans={
             <>
               The <span className="font-semibold">reference total water</span> is{" "}
-              {referenceUnits.liters} L/day ({referenceUnits.ml} ml) from all beverages and food,
-              an adult population reference. About {beverageUnits.liters} L/day comes from drinks.
+              {referenceUnits ? referenceUnits.liters : "—"} L/day ({referenceUnits ? referenceUnits.ml : "—"} ml) from all beverages and food,
+              an adult population reference. About {beverageUnits ? beverageUnits.liters : "—"} L/day comes from drinks.
               A separate rough weight-based estimate is{" "}
               {weightUnits ? `${weightUnits.liters} L/day` : "not available"}. These are different
               reference systems and should not be added together.
