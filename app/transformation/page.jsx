@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, Suspense } from "react";
+import React, { useState, Suspense, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
@@ -19,6 +19,12 @@ import {
   cmToFeetInches,
   feetInchesToCm,
 } from "@/lib/calculators";
+import {
+  createTransformationSessionPayload,
+  readTransformationSession,
+  saveTransformationSession,
+  clearTransformationSession,
+} from "@/lib/transformation-session";
 import ResultExplanation from "@/components/atoms/ResultExplanation";
 import HealthDisclaimer from "@/components/atoms/HealthDisclaimer";
 
@@ -61,6 +67,36 @@ function TransformationForm() {
     ? urlSource
     : "transformation";
   const router = useRouter();
+
+  // Restore a completed Transformation snapshot from session storage on mount.
+  // Runs only on the client, so SSR/initial render stays a blank form with no
+  // hydration mismatch. Corrupted or stale storage is safely ignored.
+  useEffect(() => {
+    const stored = readTransformationSession();
+    if (!stored) return;
+    const { unitSystem, inputs } = stored;
+    setUnitSystem(unitSystem);
+    setCanonical({
+      weightKg: inputs.weightKg,
+      heightCm: inputs.heightCm,
+      waistCm: inputs.waistCm,
+    });
+    setForm((f) => ({
+      ...f,
+      age: inputs.age,
+      gender: inputs.gender,
+      activity: inputs.activity,
+      primaryGoal: inputs.primaryGoal,
+      aerobicActivity: inputs.aerobicActivity,
+      aerobicIntensity: inputs.aerobicIntensity,
+      strengthFrequency: inputs.strengthFrequency,
+      healthConsiderations: inputs.healthConsiderations,
+    }));
+    setSelectedServiceCategory(
+      GOAL_TO_SERVICE_MAP[inputs.primaryGoal] || "not-sure"
+    );
+    setSubmitted(true);
+  }, []);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -253,11 +289,18 @@ function TransformationForm() {
     if (validateForm()) {
       const suggestedCategory = GOAL_TO_SERVICE_MAP[form.primaryGoal] || "not-sure";
       setSelectedServiceCategory(suggestedCategory);
+      const payload = createTransformationSessionPayload({
+        unitSystem,
+        canonical,
+        form,
+      });
+      saveTransformationSession(payload);
       setSubmitted(true);
     }
   };
 
   const resetForm = () => {
+    clearTransformationSession();
     setSubmitted(false);
     setErrors({});
     setSelectedServiceCategory("");
