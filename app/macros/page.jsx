@@ -11,11 +11,13 @@ import HealthDisclaimer from "@/components/atoms/HealthDisclaimer";
 import { useShareableImage } from "@/hooks/useShareableImage";
 import CalculatorNextStep from "@/components/atoms/CalculatorNextStep";
 import {
-  calculateBMR,
-  calculateTDEE,
+  calculateAdultEER,
   calculateMacros,
+  ADULT_PAL_CATEGORIES,
+  ADULT_PAL_DESCRIPTION_NOTE,
   MACRO_PRESETS,
-  ACTIVITY_LEVELS,
+  evaluateAdultAmdr,
+  evaluateFitnessProtein,
   parseFiniteNumber,
 } from "@/lib/calculators";
 
@@ -43,7 +45,7 @@ export default function MacroCalculator() {
   // No calculation-affecting defaults: every input starts blank/unselected.
   const [gender, setGender] = useState("");
   const [age, setAge] = useState(null);
-  const [activityLevel, setActivityLevel] = useState(null);
+  const [palCategory, setPalCategory] = useState(null);
   const [calories, setCalories] = useState(null);
   const [useCalculatedCalories, setUseCalculatedCalories] = useState(true);
   const [selectedPreset, setSelectedPreset] = useState("Balanced");
@@ -101,24 +103,29 @@ export default function MacroCalculator() {
     }
   };
 
-  // Calculate TDEE using verified helpers. Returns null until every required
-  // input is valid; never lets NaN/Infinity reach rendering.
+  // Calculate calories using the 2023 DRI adult EER equation (age 19+).
+  // Returns null until every required input is valid; never lets NaN/Infinity
+  // reach rendering.
   const calculatedCalories = useMemo(() => {
     if (
       weight.kg == null ||
       height.cm == null ||
       age == null ||
       !gender ||
-      activityLevel == null
+      palCategory == null
     ) {
       return null;
     }
-    const bmr = calculateBMR(weight.kg, height.cm, age, gender);
-    if (bmr == null) return null;
-    const tdee = calculateTDEE(bmr, activityLevel);
-    if (tdee == null) return null;
-    return round(tdee);
-  }, [weight.kg, height.cm, age, gender, activityLevel]);
+    const computedEER = calculateAdultEER({
+      age,
+      sex: gender,
+      weightKg: weight.kg,
+      heightCm: height.cm,
+      palCategory,
+    });
+    if (computedEER == null) return null;
+    return round(computedEER);
+  }, [weight.kg, height.cm, age, gender, palCategory]);
 
   // Get current macro percentages
   const currentMacros = useMemo(() => {
@@ -134,6 +141,22 @@ export default function MacroCalculator() {
     currentMacros.fat == null
       ? null
       : currentMacros.protein + currentMacros.carbs + currentMacros.fat;
+
+  // Adult AMDR (age 19+) status for the current macro split
+  const adultAmdr = useMemo(() => {
+    if (
+      currentMacros.protein == null ||
+      currentMacros.carbs == null ||
+      currentMacros.fat == null
+    ) {
+      return null;
+    }
+    return evaluateAdultAmdr({
+      protein: currentMacros.protein,
+      carbs: currentMacros.carbs,
+      fat: currentMacros.fat,
+    });
+  }, [currentMacros]);
 
   // Calculate macro breakdown using verified helper. Null when inputs invalid.
   const macroBreakdown = useMemo(() => {
@@ -153,6 +176,17 @@ export default function MacroCalculator() {
     if (!preset) return null;
     return calculateMacros(totalCalories, preset);
   }, [calculatedCalories, calories, useCalculatedCalories, customMacros, selectedPreset]);
+
+  // Fitness protein context (grams per kg body weight)
+  const proteinPerKg = useMemo(() => {
+    if (!macroBreakdown || weight.kg == null) return null;
+    return round(macroBreakdown.protein.grams / weight.kg, 1);
+  }, [macroBreakdown, weight.kg]);
+
+  const fitnessProteinContext = useMemo(() => {
+    if (proteinPerKg == null) return null;
+    return evaluateFitnessProtein(proteinPerKg);
+  }, [proteinPerKg]);
 
   const handleMacroChange = (macro, value) => {
     setCustomMacros(prev => ({
@@ -192,9 +226,6 @@ export default function MacroCalculator() {
     macroBreakdown ? macroBreakdown[macro].percentage : "—";
   const barWidth = (macro) =>
     macroBreakdown ? macroBreakdown[macro].percentage : 0;
-  const perKg = macroBreakdown && weight.kg
-    ? round(macroBreakdown.protein.grams / weight.kg, 1)
-    : null;
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
@@ -266,11 +297,16 @@ export default function MacroCalculator() {
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold">Basic Information</h3>
 
-                {/* Gender Selection */}
+                {/* Sex Selection */}
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Gender
+                    Sex Used by Equation
                   </label>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    The published energy equations use male/female sex-specific
+                    coefficients. This selection is used only to choose the
+                    equation.
+                  </p>
                   <div className="flex gap-4">
                     {["male", "female"].map((g) => (
                       <label key={g} className="flex items-center">
@@ -358,30 +394,33 @@ export default function MacroCalculator() {
                 )}
               </div>
 
-              {/* Activity Level */}
+              {/* Physical Activity Level (PAL) */}
               <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Activity Level</h3>
+                <h3 className="text-lg font-semibold">Physical Activity Level</h3>
                 <div>
                   <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Activity Level
+                    Physical Activity Level
                   </label>
                   <select
-                    value={activityLevel == null ? "" : activityLevel}
-                    onChange={(e) => setActivityLevel(parseFiniteNumber(e.target.value))}
+                    value={palCategory == null ? "" : palCategory}
+                    onChange={(e) => setPalCategory(e.target.value)}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                   >
-                    <option value="">Select activity level</option>
-                    {ACTIVITY_LEVELS.map((level) => (
-                      <option key={level.value} value={level.value}>
-                        {level.label} - {level.description}
+                    <option value="">Select activity category</option>
+                    {ADULT_PAL_CATEGORIES.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.label} — {cat.description}
                       </option>
                     ))}
                   </select>
-                  {activityLevel == null && (
+                  {palCategory == null && (
                     <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
-                      Please select your activity level.
+                      Please select your physical activity category.
                     </p>
                   )}
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    {ADULT_PAL_DESCRIPTION_NOTE}
+                  </p>
                 </div>
                 <div className="rounded-lg bg-blue-50 p-4 text-center dark:bg-blue-950/40">
                   <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
@@ -429,6 +468,35 @@ export default function MacroCalculator() {
               ))}
             </select>
           </div>
+
+          {/* Adult AMDR status */}
+          {adultAmdr && (
+            <div className="mt-4 rounded-lg p-3 text-center">
+              {adultAmdr.withinRange ? (
+                <div className="bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800">
+                  <p className="text-sm text-emerald-800 dark:text-emerald-300 font-medium">
+                    Within adult AMDR reference ranges (19+)
+                  </p>
+                  <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
+                    Protein {adultAmdr.protein.within ? "✓" : "✗"}&nbsp;|
+                    Carbs {adultAmdr.carbs.within ? "✓" : "✗"}&nbsp;|
+                    Fat {adultAmdr.fat.within ? "✓" : "✗"}
+                  </p>
+                </div>
+              ) : (
+                <div className="bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800">
+                  <p className="text-sm text-amber-800 dark:text-amber-300 font-medium">
+                    Outside one or more adult AMDR reference ranges (19+)
+                  </p>
+                  <p className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+                    Outside:{' '}
+                    {adultAmdr.outOfRangeMacros.join(", ")}{" "}
+                    Reference: Protein 10–35% | Carbs 45–65% | Fat 20–35%
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Custom Macro Inputs */}
           {selectedPreset === "Custom" && (
@@ -509,10 +577,15 @@ export default function MacroCalculator() {
                   style={{ width: `${barWidth("protein")}%` }}
                 ></div>
               </div>
-              {perKg != null && (
+              {proteinPerKg != null && (
                 <p className="mt-3 text-xs text-gray-500 dark:text-gray-400 text-center">
-                  ≈ {perKg} g per kg body weight
-                </p>
+                  ≈ {proteinPerKg} g per kg body weight —{" "}
+                  {fitnessProteinContext === "below"
+                    ? "below the commonly cited fitness reference range"
+                    : fitnessProteinContext === "within"
+                      ? "within the commonly cited fitness reference range"
+                      : "above the commonly cited fitness reference range"}
+                  </p>
               )}
             </div>
           </motion.div>

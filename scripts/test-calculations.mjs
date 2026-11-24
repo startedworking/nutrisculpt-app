@@ -281,8 +281,8 @@ test("calorie goal descriptions avoid weight-rate guarantees", () => {
   const gainGoal = CALORIE_GOALS.find(g => g.value === 500);
   assert.ok(!loseGoal.description.includes("lb/week"));
   assert.ok(!gainGoal.description.includes("lb/week"));
-  assert.equal(loseGoal.description, "Moderate deficit");
-  assert.equal(gainGoal.description, "Moderate surplus");
+  assert.equal(loseGoal.description, "Illustrative 500 kcal/day deficit");
+  assert.equal(gainGoal.description, "Illustrative 500 kcal/day surplus");
 });
 
 // ---------------------------------------------------------------------------

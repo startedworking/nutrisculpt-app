@@ -12,10 +12,13 @@ import { useShareableImage } from "@/hooks/useShareableImage";
 import CalculatorNextStep from "@/components/atoms/CalculatorNextStep";
 import {
   calculateBMR,
-  calculateTDEE,
+  calculateAdultEER,
   calculateTargetCalories,
-  ACTIVITY_LEVELS,
+  ADULT_PAL_CATEGORIES,
+  ADULT_PAL_DESCRIPTION_NOTE,
   CALORIE_GOALS,
+  evaluateAdultAmdr,
+  evaluateFitnessProtein,
   parseFiniteNumber,
 } from "@/lib/calculators";
 
@@ -43,7 +46,7 @@ export default function CalorieCalculator() {
   // No calculation-affecting defaults: every input starts blank/unselected.
   const [gender, setGender] = useState("");
   const [age, setAge] = useState(null);
-  const [activityLevel, setActivityLevel] = useState(null);
+  const [palCategory, setPalCategory] = useState(null);
   const [goal, setGoal] = useState(null);
 
   // Store both metric and imperial values; null = blank / not provided.
@@ -103,62 +106,68 @@ export default function CalorieCalculator() {
 
   // Calculate calories only when every required input is valid. Returns null
   // for any invalid input so no NaN/0 leaks into rendering.
-  const { bmr, tdee, targetCalories, inputsValid } = useMemo(() => {
+  // Maintenance energy now uses the 2023 DRI adult EER equation (age 19+);
+  // Mifflin RMR is shown separately as a resting reference.
+  const { rmr, eer, goalAdjustedCalories, inputsValid } = useMemo(() => {
     if (
       weight.kg == null ||
       height.cm == null ||
       age == null ||
       !gender ||
-      activityLevel == null ||
+      palCategory == null ||
       goal == null
     ) {
-      return { bmr: null, tdee: null, targetCalories: null, inputsValid: false };
+      return { rmr: null, eer: null, goalAdjustedCalories: null, inputsValid: false };
     }
-    const computedBMR = calculateBMR(weight.kg, height.cm, age, gender);
-    if (computedBMR == null) {
-      return { bmr: null, tdee: null, targetCalories: null, inputsValid: false };
+    const computedRMR = calculateBMR(weight.kg, height.cm, age, gender);
+    if (computedRMR == null) {
+      return { rmr: null, eer: null, goalAdjustedCalories: null, inputsValid: false };
     }
-    const computedTDEE = calculateTDEE(computedBMR, activityLevel);
-    if (computedTDEE == null) {
-      return { bmr: null, tdee: null, targetCalories: null, inputsValid: false };
+    const computedEER = calculateAdultEER({
+      age,
+      sex: gender,
+      weightKg: weight.kg,
+      heightCm: height.cm,
+      palCategory,
+    });
+    if (computedEER == null) {
+      return { rmr: null, eer: null, goalAdjustedCalories: null, inputsValid: false };
     }
-    const computedTarget = calculateTargetCalories(computedTDEE, goal);
-    if (computedTarget == null) {
-      return { bmr: null, tdee: null, targetCalories: null, inputsValid: false };
+    const computedGoalAdjusted = calculateTargetCalories(computedEER, goal);
+    if (computedGoalAdjusted == null) {
+      return { rmr: null, eer: null, goalAdjustedCalories: null, inputsValid: false };
     }
     return {
-      bmr: round(computedBMR),
-      tdee: round(computedTDEE),
-      targetCalories: round(computedTarget),
+      rmr: round(computedRMR),
+      eer: round(computedEER),
+      goalAdjustedCalories: round(computedGoalAdjusted),
       inputsValid: true,
     };
-  }, [weight.kg, height.cm, age, gender, activityLevel, goal]);
+  }, [weight.kg, height.cm, age, gender, palCategory, goal]);
 
-  const selectedActivity = ACTIVITY_LEVELS.find(
-    (level) => level.value === activityLevel,
-  );
+  const selectedPal = ADULT_PAL_CATEGORIES.find((p) => p.id === palCategory);
   const selectedGoal = CALORIE_GOALS.find((g) => g.value === goal);
 
-  // Sex coefficient explanation for Mifflin-St Jeor
+  // Sex coefficient explanation for Mifflin-St Jeor RMR equation
   const sexCoefficient = gender === "male" ? "+5" : "−161";
   const sexCoefficientLabel =
     gender === "male" ? "men" : "women";
 
   // Prepare share data for calorie results
   const shareResult = useMemo(() => {
-    if (!targetCalories || targetCalories <= 0) return null;
+    if (!goalAdjustedCalories || goalAdjustedCalories <= 0) return null;
 
     return validateResultForPrivacy(
       {
-        value: targetCalories,
+        value: goalAdjustedCalories,
         unit: "calories/day",
         goal: selectedGoal?.label || "Maintain Weight",
-        bmr: bmr,
-        tdee: tdee,
+        rmr,
+        maintenanceEER: eer,
       },
-      ["weight", "height", "age", "gender", "activityLevel"],
+      ["weight", "height", "age", "gender", "palCategory"],
     ); // Exclude sensitive input data
-  }, [targetCalories, selectedGoal, bmr, tdee, validateResultForPrivacy]);
+  }, [goalAdjustedCalories, selectedGoal, rmr, eer, validateResultForPrivacy]);
 
   const shareData = useMemo(() => {
     if (!shareResult) return null;
@@ -213,8 +222,13 @@ export default function CalorieCalculator() {
               {/* Gender Selection */}
               <div>
                 <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Gender
+                  Sex Used by Equation
                 </label>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  The published energy equations use male/female sex-specific
+                  coefficients. This selection is used only to choose the
+                  equation.
+                </p>
                 <div className="flex gap-4">
                   {["male", "female"].map((g) => (
                     <label key={g} className="flex items-center">
@@ -246,7 +260,7 @@ export default function CalorieCalculator() {
                 onChange={(value) => setAge(parseFiniteNumber(value))}
                 type="number"
                 placeholder="25"
-                min="1"
+                min="19"
                 max="120"
                 unit="years"
               />
@@ -312,13 +326,13 @@ export default function CalorieCalculator() {
                 </div>
               )}
             </div>
-
             {/* Equation explanation */}
             <div className="mt-6">
               <div className="rounded-lg bg-blue-50 p-4 text-sm text-blue-900 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/40 dark:text-blue-200 dark:ring-blue-900/40">
                 <p className="font-medium mb-1">Mifflin–St Jeor Equation</p>
                 <p className="text-sm">
-                  Mifflin–St Jeor estimates resting energy expenditure (RMR/REE), not basal metabolic rate (BMR):
+                  Mifflin–St Jeor estimates resting energy expenditure (RMR/REE),
+                  not basal metabolic rate (BMR):{" "}
                   RMR = 10 × weight + 6.25 × height − 5 × age + sex coefficient.
                   The sex coefficient is{" "}
                   <span className="font-semibold">{sexCoefficient}</span>{" "}
@@ -326,38 +340,44 @@ export default function CalorieCalculator() {
                   the published equation, not a statement about gender identity.
                   Results are population-level estimates.
                 </p>
+                <p className="mt-2 text-sm">
+                  Estimated maintenance energy uses the 2023 National Academies
+                  Dietary Reference Intakes adult Estimated Energy Requirement
+                  (EER) equation at your selected activity category.
+                </p>
               </div>
             </div>
 
-            {/* Activity & Goals */}
-            <div className="space-y-4">
-              <h3 className="text-lg font-semibold">Activity & Goals</h3>
+              {/* Activity & Goals */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Activity & Goals</h3>
 
-              {/* Activity Level */}
-              <div>
-                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                  Activity Level
-                </label>
-                <select
-                  value={activityLevel == null ? "" : activityLevel}
-                  onChange={(e) =>
-                    setActivityLevel(parseFiniteNumber(e.target.value))
-                  }
-                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                >
-                  <option value="">Select activity level</option>
-                  {ACTIVITY_LEVELS.map((level) => (
-                    <option key={level.value} value={level.value}>
-                      {level.label} - {level.description}
-                    </option>
-                  ))}
-                </select>
-                {activityLevel == null && (
-                  <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
-                    Please select your activity level.
+                {/* Physical Activity Level (PAL) */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Physical Activity Level
+                  </label>
+                  <select
+                    value={palCategory == null ? "" : palCategory}
+                    onChange={(e) => setPalCategory(e.target.value)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  >
+                    <option value="">Select activity category</option>
+                    {ADULT_PAL_CATEGORIES.map((cat) => (
+                      <option key={cat.id} value={cat.id}>
+                        {cat.label} — {cat.description}
+                      </option>
+                    ))}
+                  </select>
+                  {palCategory == null && (
+                    <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+                      Please select your physical activity category.
+                    </p>
+                  )}
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    {ADULT_PAL_DESCRIPTION_NOTE}
                   </p>
-                )}
-              </div>
+                </div>
 
               {/* Goal Selection */}
               <div>
@@ -401,7 +421,7 @@ export default function CalorieCalculator() {
         {/* Results Section */}
         {inputsValid ? (
           <div className="mt-8 grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {/* BMR Result */}
+            {/* RMR Result */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -414,7 +434,7 @@ export default function CalorieCalculator() {
                 </h3>
                 <div className="mb-4">
                   <p className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-400">
-                    {bmr}
+                    {rmr}
                   </p>
                   <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                     calories/day
@@ -426,7 +446,7 @@ export default function CalorieCalculator() {
               </div>
             </motion.div>
 
-            {/* TDEE Result */}
+            {/* Estimated Maintenance Energy (EER) Result */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -435,23 +455,23 @@ export default function CalorieCalculator() {
             >
               <div className="text-center">
                 <h3 className="mb-4 text-lg font-semibold">
-                  Maintenance Calories
+                  Estimated Maintenance Energy
                 </h3>
                 <div className="mb-4">
                   <p className="text-4xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400">
-                    {tdee}
+                    {eer}
                   </p>
                   <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                     calories/day
                   </p>
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  With {selectedActivity?.label.toLowerCase()} lifestyle
+                  2023 DRI adult Estimated Energy Requirement at {selectedPal?.label.toLowerCase()} activity
                 </p>
               </div>
             </motion.div>
 
-            {/* Target Calories Result */}
+            {/* Goal-Adjusted Estimate Result */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -459,17 +479,17 @@ export default function CalorieCalculator() {
               className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
             >
               <div className="text-center">
-                <h3 className="mb-4 text-lg font-semibold">Target Calories</h3>
+                <h3 className="mb-4 text-lg font-semibold">Goal-Adjusted Estimate</h3>
                 <div className="mb-4">
                   <p className="text-4xl font-extrabold tracking-tight text-purple-600 dark:text-purple-400">
-                    {targetCalories}
+                    {goalAdjustedCalories}
                   </p>
                   <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                     calories/day
                   </p>
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  To {selectedGoal?.label.toLowerCase()}
+                  {selectedGoal?.description}
                 </p>
               </div>
             </motion.div>
@@ -490,25 +510,27 @@ export default function CalorieCalculator() {
                 <>
                   Your{" "}
                   <span className="font-semibold">
-                    Basal Metabolic Rate (BMR)
+                    Resting Metabolic Rate (RMR)
                   </span>{" "}
-                  of {bmr} calories/day is the energy your body needs at rest
-                  for basic functions. Your{" "}
+                  of {rmr} calories/day is the estimated energy your body
+                  needs at rest for basic functions. Your estimated{" "}
                   <span className="font-semibold">
-                    maintenance calories (TDEE)
+                    maintenance energy (EER)
                   </span>{" "}
-                  of {tdee} calories/day includes your daily activity. Your{" "}
-                  <span className="font-semibold">target</span> of{" "}
-                  {targetCalories} calories/day is adjusted for your goal of{" "}
-                  {selectedGoal?.label.toLowerCase()}.
+                  of {eer} calories/day is based on the 2023 National Academies
+                  Dietary Reference Intakes at your selected activity category.
+                  Your goal-adjusted estimate of{" "}
+                  {goalAdjustedCalories} calories/day is an illustrative
+                  scenario for {selectedGoal?.label}.{selectedGoal?.description && ` ${selectedGoal.description}`}
                 </>
               }
               whyItMatters={
                 <>
-                  Eating at a moderate deficit below your maintenance calories
-                  can lead to gradual weight loss, while eating above them
-                  supports weight gain. Matching your intake to your goal is
-                  key to achieving lasting results.
+                  Your maintenance energy is a starting reference, not a fixed
+                  rule. Eating below it may support gradual weight loss, while
+                  eating above it may support weight gain. Matching intake to
+                  your goal, progress and how you feel is key — individual
+                  needs vary substantially.
                 </>
               }
               limitations={
@@ -542,24 +564,24 @@ export default function CalorieCalculator() {
                   percentage: 25,
                   color: "text-red-600 dark:text-red-400",
                   bgColor: "bg-red-100 dark:bg-red-700/20",
-                  calories: round(targetCalories * 0.25),
-                  grams: round((targetCalories * 0.25) / 4),
+                  calories: round(goalAdjustedCalories * 0.25),
+                  grams: round((goalAdjustedCalories * 0.25) / 4),
                 },
                 {
                   name: "Carbohydrates",
                   percentage: 45,
                   color: "text-blue-600 dark:text-blue-400",
                   bgColor: "bg-blue-100 dark:bg-blue-700/20",
-                  calories: round(targetCalories * 0.45),
-                  grams: round((targetCalories * 0.45) / 4),
+                  calories: round(goalAdjustedCalories * 0.45),
+                  grams: round((goalAdjustedCalories * 0.45) / 4),
                 },
                 {
                   name: "Fats",
                   percentage: 30,
                   color: "text-yellow-600 dark:text-yellow-400",
                   bgColor: "bg-yellow-100 dark:bg-yellow-700/20",
-                  calories: round(targetCalories * 0.3),
-                  grams: round((targetCalories * 0.3) / 9),
+                  calories: round(goalAdjustedCalories * 0.3),
+                  grams: round((goalAdjustedCalories * 0.3) / 9),
                 },
               ].map(({ name, percentage, color, bgColor, calories, grams }) => (
                 <div
@@ -666,7 +688,7 @@ export default function CalorieCalculator() {
                   type="calorie"
                   value={shareResult.value}
                   category={shareResult.goal}
-                  subtitle={`BMR: ${shareResult.bmr} | TDEE: ${shareResult.tdee}`}
+                  subtitle={`RMR: ${shareResult.rmr} | Maintenance EER: ${shareResult.maintenanceEER} | Goal-Adjusted: ${shareResult.value}`}
                   aspectRatio="square"
                 />
               </div>
@@ -716,7 +738,7 @@ export default function CalorieCalculator() {
             type="calorie"
             value={shareResult.value}
             category={shareResult.goal}
-            subtitle={`BMR: ${shareResult.bmr} | TDEE: ${shareResult.tdee}`}
+            subtitle={`RMR: ${shareResult.rmr} | Maintenance EER: ${shareResult.maintenanceEER} | Goal-Adjusted: ${shareResult.value}`}
           />
         </div>
       )}

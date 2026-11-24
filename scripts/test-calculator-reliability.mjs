@@ -8,7 +8,12 @@ import {
   parseFiniteNumber,
   calculateBMR,
   calculateTDEE,
+  calculateAdultEER,
+  ADULT_PAL_CATEGORIES,
+  ADULT_AMDR,
   calculateMacros,
+  evaluateAdultAmdr,
+  evaluateFitnessProtein,
   calculateBMI,
   classifyBMI,
   bmiHealthyRange,
@@ -403,4 +408,231 @@ test("04E-2A: Heart rate terminology - predicted HR is finite for valid adult", 
   assert.ok(Number.isFinite(v.predicted));
   // Tanaka: 208 - 0.7 * 40 = 180
   assert.ok(Math.abs(v.predicted - 180) < 1);
+});
+
+// ---------------------------------------------------------------------------
+// 04E-2B Scientific energy & macronutrient tests
+// ---------------------------------------------------------------------------
+
+test("04E-2B: calculateAdultEER published example — female, 22, 165 cm, 63 kg, low active ≈ 2275", () => {
+  const eer = calculateAdultEER({
+    age: 22,
+    sex: "female",
+    weightKg: 63,
+    heightCm: 165,
+    palCategory: "low_active",
+  });
+  assert.ok(Number.isFinite(eer));
+  assert.ok(Math.abs(eer - 2275.37) < 0.01);
+});
+
+test("04E-2B: calculateAdultEER rejects age below 19", () => {
+  assert.equal(
+    calculateAdultEER({
+      age: 18,
+      sex: "female",
+      weightKg: 63,
+      heightCm: 165,
+      palCategory: "low_active",
+    }),
+    null,
+  );
+});
+
+test("04E-2B: calculateAdultEER accepts age 19", () => {
+  const eer = calculateAdultEER({
+    age: 19,
+    sex: "female",
+    weightKg: 63,
+    heightCm: 165,
+    palCategory: "low_active",
+  });
+  assert.ok(Number.isFinite(eer));
+});
+
+test("04E-2B: calculateAdultEER rejects invalid sex", () => {
+  assert.equal(
+    calculateAdultEER({
+      age: 30,
+      sex: "other",
+      weightKg: 70,
+      heightCm: 175,
+      palCategory: "low_active",
+    }),
+    null,
+  );
+});
+
+test("04E-2B: calculateAdultEER rejects invalid PAL", () => {
+  assert.equal(
+    calculateAdultEER({
+      age: 30,
+      sex: "male",
+      weightKg: 70,
+      heightCm: 175,
+      palCategory: "super_active",
+    }),
+    null,
+  );
+});
+
+test("04E-2B: calculateAdultEER rejects blank/NaN/Infinity inputs", () => {
+  assert.equal(
+    calculateAdultEER({
+      age: NaN,
+      sex: "male",
+      weightKg: 70,
+      heightCm: 175,
+      palCategory: "low_active",
+    }),
+    null,
+  );
+  assert.equal(
+    calculateAdultEER({
+      age: 30,
+      sex: "male",
+      weightKg: Infinity,
+      heightCm: 175,
+      palCategory: "low_active",
+    }),
+    null,
+  );
+  assert.equal(
+    calculateAdultEER({
+      age: 30,
+      sex: "male",
+      weightKg: null,
+      heightCm: 175,
+      palCategory: "low_active",
+    }),
+    null,
+  );
+});
+
+test("04E-2B: calculateAdultEER rejects zero/negative height and weight", () => {
+  assert.equal(
+    calculateAdultEER({
+      age: 30,
+      sex: "male",
+      weightKg: 0,
+      heightCm: 175,
+      palCategory: "low_active",
+    }),
+    null,
+  );
+  assert.equal(
+    calculateAdultEER({
+      age: 30,
+      sex: "male",
+      weightKg: 70,
+      heightCm: -5,
+      palCategory: "low_active",
+    }),
+    null,
+  );
+});
+
+test("04E-2B: all eight adult EER equation branches produce finite values", () => {
+  const cases = [
+    { sex: "male", palCategory: "inactive" },
+    { sex: "male", palCategory: "low_active" },
+    { sex: "male", palCategory: "active" },
+    { sex: "male", palCategory: "very_active" },
+    { sex: "female", palCategory: "inactive" },
+    { sex: "female", palCategory: "low_active" },
+    { sex: "female", palCategory: "active" },
+    { sex: "female", palCategory: "very_active" },
+  ];
+  for (const c of cases) {
+    const eer = calculateAdultEER({
+      age: 30,
+      sex: c.sex,
+      weightKg: 70,
+      heightCm: 175,
+      palCategory: c.palCategory,
+    });
+    assert.ok(Number.isFinite(eer), `${c.sex} ${c.palCategory}`);
+    assert.ok(eer > 0, `${c.sex} ${c.palCategory}`);
+  }
+});
+
+test("04E-2B: ADULT_AMDR ranges", () => {
+  assert.equal(ADULT_AMDR.protein.min, 10);
+  assert.equal(ADULT_AMDR.protein.max, 35);
+  assert.equal(ADULT_AMDR.carbs.min, 45);
+  assert.equal(ADULT_AMDR.carbs.max, 65);
+  assert.equal(ADULT_AMDR.fat.min, 20);
+  assert.equal(ADULT_AMDR.fat.max, 35);
+});
+
+test("04E-2B: evaluateAdultAmdr — Balanced 25/45/30 within range", () => {
+  const r = evaluateAdultAmdr({ protein: 25, carbs: 45, fat: 30 });
+  assert.equal(r.withinRange, true);
+  assert.equal(r.outOfRangeMacros.length, 0);
+});
+
+test("04E-2B: evaluateAdultAmdr — High Carb 20/60/20 within range", () => {
+  const r = evaluateAdultAmdr({ protein: 20, carbs: 60, fat: 20 });
+  assert.equal(r.withinRange, true);
+});
+
+test("04E-2B: evaluateAdultAmdr — High Protein 35/35/30 outside (carbs below 45)", () => {
+  const r = evaluateAdultAmdr({ protein: 35, carbs: 35, fat: 30 });
+  assert.equal(r.withinRange, false);
+  assert.ok(r.outOfRangeMacros.includes("carbs"));
+});
+
+test("04E-2B: evaluateAdultAmdr — Low Carb 30/20/50 outside", () => {
+  const r = evaluateAdultAmdr({ protein: 30, carbs: 20, fat: 50 });
+  assert.equal(r.withinRange, false);
+  assert.ok(r.outOfRangeMacros.includes("carbs"));
+  assert.ok(r.outOfRangeMacros.includes("fat"));
+});
+
+test("04E-2B: evaluateAdultAmdr — Keto 25/5/70 outside", () => {
+  const r = evaluateAdultAmdr({ protein: 25, carbs: 5, fat: 70 });
+  assert.equal(r.withinRange, false);
+  assert.ok(r.outOfRangeMacros.includes("carbs"));
+  assert.ok(r.outOfRangeMacros.includes("fat"));
+});
+
+test("04E-2B: AMDR boundaries inclusive — protein 10 & 35, carbs 45 & 65, fat 20 & 35", () => {
+  const r = evaluateAdultAmdr({ protein: 10, carbs: 45, fat: 20 });
+  assert.equal(r.withinRange, true);
+  const r2 = evaluateAdultAmdr({ protein: 35, carbs: 65, fat: 35 });
+  assert.equal(r2.withinRange, true);
+});
+
+test("04E-2B: evaluateFitnessProtein boundaries", () => {
+  assert.equal(evaluateFitnessProtein(1.39), "below");
+  assert.equal(evaluateFitnessProtein(1.4), "within");
+  assert.equal(evaluateFitnessProtein(2.0), "within");
+  assert.equal(evaluateFitnessProtein(2.01), "above");
+  assert.equal(evaluateFitnessProtein(null), null);
+  assert.equal(evaluateFitnessProtein(NaN), null);
+});
+
+test("04E-2B: calculateTargetCalories goal adjustments from EER", () => {
+  const eer = 2000;
+  assert.equal(calculateTargetCalories(eer, -500), 1500);
+  assert.equal(calculateTargetCalories(eer, -250), 1750);
+  assert.equal(calculateTargetCalories(eer, 0), 2000);
+  assert.equal(calculateTargetCalories(eer, 250), 2250);
+  assert.equal(calculateTargetCalories(eer, 500), 2500);
+});
+
+test("04E-2B: calculateTargetCalories rejects non-finite / non-positive", () => {
+  assert.equal(calculateTargetCalories(null, 0), null);
+  assert.equal(calculateTargetCalories(NaN, 0), null);
+  assert.equal(calculateTargetCalories(0, 0), null);
+  assert.equal(calculateTargetCalories(2000, NaN), null);
+});
+
+test("04E-2B: ADULT_PAL_CATEGORIES has four categories", () => {
+  assert.equal(ADULT_PAL_CATEGORIES.length, 4);
+  const ids = ADULT_PAL_CATEGORIES.map((c) => c.id);
+  assert.ok(ids.includes("inactive"));
+  assert.ok(ids.includes("low_active"));
+  assert.ok(ids.includes("active"));
+  assert.ok(ids.includes("very_active"));
 });
