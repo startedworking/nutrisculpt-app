@@ -2,10 +2,7 @@
 
 import React, { useState, Suspense } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
-import InputField from "@/components/atoms/InputField";
-import ResultExplanation from "@/components/atoms/ResultExplanation";
-import HealthDisclaimer from "@/components/atoms/HealthDisclaimer";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
   GOAL_TO_SERVICE_MAP,
   GOAL_LABELS,
@@ -14,53 +11,195 @@ import {
   SERVICE_CATEGORIES,
 } from "@/constants/services";
 import { isValidCalculatorSource } from "@/lib/back-link-security";
+import {
+  kgToLbExact,
+  lbToKgExact,
+  cmToIn,
+  inToCm,
+  cmToFeetInches,
+  feetInchesToCm,
+} from "@/lib/calculators";
+import ResultExplanation from "@/components/atoms/ResultExplanation";
+import HealthDisclaimer from "@/components/atoms/HealthDisclaimer";
+
+const round1 = (value) => Math.round(value * 10) / 10;
 
 function TransformationForm() {
+  const [unitSystem, setUnitSystem] = useState("metric");
   const [form, setForm] = useState({
     gender: "",
     age: "",
-    height: "",
     weight: "",
+    height: "",
+    heightIn: "",
+    waist: "",
     activity: "",
     primaryGoal: "",
     aerobicActivity: "",
     aerobicIntensity: "",
     strengthFrequency: "",
-    waistCircumference: "",
     healthConsiderations: "no",
   });
   const [submitted, setSubmitted] = useState(false);
   const [errors, setErrors] = useState({});
   const [selectedServiceCategory, setSelectedServiceCategory] = useState("");
 
-  // Resolve referral source: preserve calculator origin if present in URL
   const searchParams = useSearchParams();
   const urlSource = searchParams.get("source") || "";
   const resolvedSource = isValidCalculatorSource(urlSource)
     ? urlSource
     : "transformation";
+  const router = useRouter();
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm((f) => ({ ...f, [name]: value }));
-    // Clear error when user types
     if (errors[name]) {
       setErrors((e) => ({ ...e, [name]: null }));
     }
   };
 
+  const handleWeightChange = (value) => {
+    setForm((f) => ({ ...f, weight: value }));
+    if (errors.weight) {
+      setErrors((e) => ({ ...e, weight: null }));
+    }
+  };
+
+  const handleHeightChange = (value) => {
+    setForm((f) => ({ ...f, height: value }));
+    if (errors.height) {
+      setErrors((e) => ({ ...e, height: null }));
+    }
+  };
+
+  const handleHeightInChange = (value) => {
+    setForm((f) => ({ ...f, heightIn: value }));
+    if (errors.height) {
+      setErrors((e) => ({ ...e, height: null }));
+    }
+  };
+
+  const handleWaistChange = (value) => {
+    setForm((f) => ({ ...f, waist: value }));
+    if (errors.waist) {
+      setErrors((e) => ({ ...e, waist: null }));
+    }
+  };
+
+  const handleUnitChange = (newSystem) => {
+    if (newSystem === unitSystem) return;
+    setForm((f) => {
+      const nf = { ...f };
+      const w = parseFloat(f.weight);
+      if (Number.isFinite(w) && w >= 0) {
+        nf.weight = unitSystem === "metric"
+          ? String(round1(kgToLbExact(w)))
+          : String(round1(lbToKgExact(w)));
+      }
+      if (unitSystem === "metric" && newSystem === "imperial") {
+        const h = parseFloat(f.height);
+        if (Number.isFinite(h) && h >= 0) {
+          const { ft, inches } = cmToFeetInches(h);
+          nf.height = String(ft);
+          nf.heightIn = String(round1(inches));
+        }
+      } else if (unitSystem === "imperial" && newSystem === "metric") {
+        const ft = parseFloat(f.height) || 0;
+        const inVal = parseFloat(f.heightIn) || 0;
+        if (f.height !== "" || f.heightIn !== "") {
+          nf.height = String(feetInchesToCm(ft, inVal));
+          nf.heightIn = "";
+        }
+      }
+      const waist = parseFloat(f.waist);
+      if (Number.isFinite(waist) && waist >= 0) {
+        nf.waist = unitSystem === "metric"
+          ? String(round1(cmToIn(waist)))
+          : String(round1(inToCm(waist)));
+      }
+      return nf;
+    });
+    setUnitSystem(newSystem);
+  };
+
+  const handleBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) {
+      router.back();
+    } else {
+      router.push("/");
+    }
+  };
+
   const validateForm = () => {
     const newErrors = {};
-    // Required fields for core calculations
-    if (!form.age || form.age < 1) newErrors.age = "Please enter your age";
-    if (!form.height || form.height < 50) newErrors.height = "Please enter a valid height (cm)";
-    if (!form.weight || form.weight < 20) newErrors.weight = "Please enter a valid weight (kg)";
-    if (!form.gender) newErrors.gender = "Please select the equation input needed for this estimate.";
-    if (!form.activity) newErrors.activity = "Please select your general activity level.";
-    // Optional fields - only validate if provided
-    if (form.waistCircumference && (form.waistCircumference < 40 || form.waistCircumference > 200)) {
-      newErrors.waistCircumference = "Please enter a valid waist circumference (40-200 cm)";
+
+    const ageVal = parseFloat(form.age);
+    if (!form.age || !Number.isFinite(ageVal) || ageVal < 1) {
+      newErrors.age = "Please enter your age";
     }
+
+    if (!form.gender) {
+      newErrors.gender = "Please select the equation input needed for this estimate.";
+    }
+
+    if (!form.activity) {
+      newErrors.activity = "Please select your general activity level.";
+    }
+
+    const wVal = parseFloat(form.weight);
+    if (!form.weight || !Number.isFinite(wVal) || wVal <= 0) {
+      newErrors.weight = unitSystem === "metric"
+        ? "Please enter a valid weight (kg)"
+        : "Please enter a valid weight (lb)";
+    } else if (unitSystem === "metric" && (wVal < 20 || wVal > 300)) {
+      newErrors.weight = "Please enter a valid weight (20-300 kg)";
+    } else if (unitSystem === "imperial" && (wVal < 44 || wVal > 661)) {
+      newErrors.weight = "Please enter a valid weight (44-661 lb)";
+    }
+
+    if (unitSystem === "metric") {
+      const hVal = parseFloat(form.height);
+      if (!form.height || !Number.isFinite(hVal) || hVal <= 0) {
+        newErrors.height = "Please enter a valid height (cm)";
+      } else if (hVal < 50 || hVal > 250) {
+        newErrors.height = "Please enter a valid height (50-250 cm)";
+      }
+    } else {
+      if (form.height === "" || form.heightIn === "") {
+        newErrors.height = "Please enter both feet and inches";
+      } else {
+        const ft = parseFloat(form.height);
+        const inVal = parseFloat(form.heightIn);
+        if (
+          !Number.isFinite(ft) ||
+          !Number.isFinite(inVal) ||
+          ft < 0 ||
+          inVal < 0 ||
+          inVal >= 12
+        ) {
+          newErrors.height = "Please enter valid feet and inches";
+        } else {
+          const totalCm = feetInchesToCm(ft, inVal);
+          if (totalCm < 50 || totalCm > 250) {
+            newErrors.height =
+              "Please enter a valid height (50-250 cm / approx. 1'8\"-8'2\")";
+          }
+        }
+      }
+    }
+
+    if (form.waist !== "") {
+      const waistVal = parseFloat(form.waist);
+      if (!Number.isFinite(waistVal) || waistVal <= 0) {
+        newErrors.waist = "Please enter a valid waist circumference";
+      } else if (unitSystem === "metric" && (waistVal < 40 || waistVal > 200)) {
+        newErrors.waist = "Please enter a valid waist (40-200 cm)";
+      } else if (unitSystem === "imperial" && (waistVal < 16 || waistVal > 79)) {
+        newErrors.waist = "Please enter a valid waist (16-79 in)";
+      }
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -80,7 +219,6 @@ function TransformationForm() {
     setSelectedServiceCategory("");
   };
 
-  // Activity level options with improved descriptions
   const ACTIVITY_LEVELS = [
     { value: "sedentary", label: "Sedentary", description: "Mostly seated, minimal everyday movement" },
     { value: "light", label: "Lightly active", description: "Some daily movement and light activity" },
@@ -89,7 +227,6 @@ function TransformationForm() {
     { value: "veryActive", label: "Extremely active", description: "Exceptionally high daily physical activity" },
   ];
 
-  // Primary goal options
   const GOAL_OPTIONS = [
     { value: "strength", label: "Build strength and general fitness" },
     { value: "health", label: "Improve health-focused fitness" },
@@ -99,7 +236,6 @@ function TransformationForm() {
     { value: "unsure", label: "Not sure yet" },
   ];
 
-  // Aerobic activity duration options
   const AEROBIC_DURATION_OPTIONS = [
     { value: "none", label: "None" },
     { value: "lt75", label: "Less than 75 minutes" },
@@ -109,7 +245,6 @@ function TransformationForm() {
     { value: "unsure", label: "Not sure" },
   ];
 
-  // Aerobic intensity options
   const AEROBIC_INTENSITY_OPTIONS = [
     { value: "moderate", label: "Mostly moderate" },
     { value: "vigorous", label: "Mostly vigorous" },
@@ -117,7 +252,6 @@ function TransformationForm() {
     { value: "unsure", label: "Not sure" },
   ];
 
-  // Strength training frequency options
   const STRENGTH_FREQUENCY_OPTIONS = [
     { value: "0", label: "0 days" },
     { value: "1", label: "1 day" },
@@ -127,23 +261,56 @@ function TransformationForm() {
     { value: "unsure", label: "Not sure" },
   ];
 
-  // Health considerations options
   const HEALTH_CONSIDERATIONS_OPTIONS = [
     { value: "yes", label: "Yes" },
     { value: "no", label: "No" },
     { value: "prefer_not", label: "Prefer not to say" },
   ];
 
-  const h = form.height ? form.height / 100 : 0;
-  const bmi = form.height && form.weight ? form.weight / (h * h) : 0;
+  const weightVal = parseFloat(form.weight);
+  const weightKg =
+    form.weight !== "" && Number.isFinite(weightVal) && weightVal > 0
+      ? unitSystem === "metric"
+        ? weightVal
+        : lbToKgExact(weightVal)
+      : null;
+
+  let heightCm = null;
+  if (unitSystem === "metric") {
+    const hVal = parseFloat(form.height);
+    if (form.height !== "" && Number.isFinite(hVal) && hVal > 0) {
+      heightCm = hVal;
+    }
+  } else {
+    if (form.height !== "" && form.heightIn !== "") {
+      const ft = parseFloat(form.height);
+      const inVal = parseFloat(form.heightIn);
+      if (Number.isFinite(ft) && Number.isFinite(inVal) && ft >= 0 && inVal >= 0) {
+        heightCm = feetInchesToCm(ft, inVal);
+      }
+    }
+  }
+
+  const waistVal = parseFloat(form.waist);
+  const waistCm =
+    form.waist !== "" && Number.isFinite(waistVal) && waistVal > 0
+      ? unitSystem === "metric"
+        ? waistVal
+        : inToCm(waistVal)
+      : null;
+
+  const ageNum = parseFloat(form.age);
+
+  const h = heightCm ? heightCm / 100 : 0;
+  const bmi = heightCm && weightKg ? weightKg / (h * h) : 0;
   const idealWeightMin = h > 0 ? 18.5 * h * h : 0;
   const idealWeightMax = h > 0 ? 24.9 * h * h : 0;
   const hasGender = form.gender === "male" || form.gender === "female";
   const hasActivity = !!form.activity;
-  const bmr = hasGender && form.age && form.height && form.weight
+  const bmr = hasGender && ageNum && heightCm && weightKg
     ? form.gender === "male"
-      ? 10 * (form.weight || 0) + 6.25 * (form.height || 0) - 5 * (form.age || 0) + 5
-      : 10 * (form.weight || 0) + 6.25 * (form.height || 0) - 5 * (form.age || 0) - 161
+      ? 10 * weightKg + 6.25 * heightCm - 5 * ageNum + 5
+      : 10 * weightKg + 6.25 * heightCm - 5 * ageNum - 161
     : 0;
   const activityFactor = hasActivity
     ? {
@@ -155,13 +322,11 @@ function TransformationForm() {
       }[form.activity]
     : 0;
   const maintenanceCalories = bmr > 0 && activityFactor > 0 ? Math.round(bmr * activityFactor) : 0;
-  // Example macronutrient distribution: 25% protein, 45% carbs, 30% fat
   const protein = maintenanceCalories > 0 ? Math.round((maintenanceCalories * 0.25) / 4) : 0;
   const carbs = maintenanceCalories > 0 ? Math.round((maintenanceCalories * 0.45) / 4) : 0;
   const fat = maintenanceCalories > 0 ? Math.round((maintenanceCalories * 0.3) / 9) : 0;
-  const estimatedMaxHR = form.age ? 220 - form.age : 0;
-  const waterIntake = form.weight ? form.weight * 0.033 : 0;
-  // Heart rate zones using standard percentage ranges
+  const estimatedMaxHR = ageNum ? 220 - ageNum : 0;
+  const waterIntake = weightKg ? weightKg * 0.033 : 0;
   const hrZones = [
     {
       name: "Very Light",
@@ -205,15 +370,11 @@ function TransformationForm() {
     },
   ];
 
-  // Waist-to-height ratio (optional)
-  const waistToHeightRatioRaw = form.waistCircumference && form.height
-    ? form.waistCircumference / form.height
-    : null;
+  const waistToHeightRatioRaw = waistCm && heightCm ? waistCm / heightCm : null;
   const waistToHeightRatio = waistToHeightRatioRaw != null
     ? waistToHeightRatioRaw.toFixed(2)
     : null;
 
-  // Moderate and vigorous heart rate ranges (from zones)
   const moderateHRRange = estimatedMaxHR > 0
     ? { min: Math.round(estimatedMaxHR * 0.5), max: Math.round(estimatedMaxHR * 0.7) }
     : null;
@@ -221,7 +382,6 @@ function TransformationForm() {
     ? { min: Math.round(estimatedMaxHR * 0.7), max: Math.round(estimatedMaxHR * 0.85) }
     : null;
 
-  // Physical activity comparison helpers
   const getAerobicComparison = () => {
     const { aerobicActivity, aerobicIntensity, age } = form;
     if (!aerobicActivity || aerobicActivity === "unsure" || !age) {
@@ -270,7 +430,6 @@ function TransformationForm() {
   const aerobicComparison = getAerobicComparison();
   const strengthComparison = getStrengthComparison();
 
-  // BMI category for adults (standard classification)
   const getBMICategory = () => {
     if (!bmi || !form.age || form.age < 18) return null;
     if (bmi < 18.5) return "Underweight";
@@ -283,7 +442,6 @@ function TransformationForm() {
 
   const bmiCategory = getBMICategory();
 
-  // Waist-to-height ratio interpretation (NICE adult guidance, BMI < 35)
   const getWaistToHeightInterpretation = () => {
     if (!waistToHeightRatioRaw) return null;
     if (!bmi || !form.age || form.age < 18)
@@ -299,13 +457,47 @@ function TransformationForm() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-10">
-      <h1 className="mb-6 text-3xl font-bold text-gray-900 dark:text-white">
-        Start Your Transformation
-      </h1>
-      
+      <button
+        onClick={handleBack}
+        className="inline-flex items-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 dark:border-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-800 transition focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+        aria-label="Back to previous page"
+      >
+        <span className="mr-2">←</span> Back
+      </button>
+
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+          Start Your Transformation
+        </h1>
+        <div className="inline-flex rounded-lg bg-gray-100 p-1 dark:bg-gray-700">
+          {[
+            { key: "metric", label: "Metric", fullLabel: "Metric (kg, cm)" },
+            { key: "imperial", label: "Imperial", fullLabel: "Imperial (lb, ft/in)" },
+          ].map(({ key, label, fullLabel }) => (
+            <button
+              key={key}
+              className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md transition-all ${
+                unitSystem === key
+                  ? "bg-white text-gray-900 shadow dark:bg-gray-900 dark:text-white"
+                  : "text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+              }`}
+              onClick={() => handleUnitChange(key)}
+              title={fullLabel}
+              aria-pressed={unitSystem === key}
+            >
+              <span className="sm:hidden">{label}</span>
+              <span className="hidden sm:inline">{fullLabel}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <p className="mt-1 text-sm text-gray-600 dark:text-gray-400 mb-6">
+        Enter a few basic details to explore your estimated fitness-related metrics.
+      </p>
+
       {!submitted ? (
         <form onSubmit={handleSubmit} className="space-y-6 rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
-          {/* Section One: Basic Details */}
           <div className="space-y-6">
             <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Your Basic Details</h2>
@@ -347,21 +539,53 @@ function TransformationForm() {
                   htmlFor="transformation-height"
                   className="block text-sm font-medium text-gray-700 dark:text-gray-300"
                 >
-                  Height (cm)
+                  Height {unitSystem === "metric" ? "(cm)" : "(feet)"}
                 </label>
-                <input
-                  id="transformation-height"
-                  type="number"
-                  name="height"
-                  value={form.height}
-                  onChange={handleChange}
-                  min="50"
-                  max="250"
-                  placeholder="e.g., 175"
-                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-                  aria-invalid={errors.height ? "true" : "false"}
-                  aria-describedby={errors.height ? "height-error" : undefined}
-                />
+                {unitSystem === "metric" ? (
+                  <input
+                    id="transformation-height"
+                    type="number"
+                    name="height"
+                    value={form.height}
+                    onChange={handleHeightChange}
+                    min="50"
+                    max="250"
+                    placeholder="e.g., 175"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                    aria-invalid={errors.height ? "true" : "false"}
+                    aria-describedby={errors.height ? "height-error" : undefined}
+                  />
+                ) : (
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      id="transformation-height-ft"
+                      type="number"
+                      name="heightFt"
+                      value={form.height}
+                      onChange={handleHeightChange}
+                      min="0"
+                      step="1"
+                      placeholder="e.g., 5"
+                      className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                      aria-invalid={errors.height ? "true" : "false"}
+                      aria-describedby={errors.height ? "height-error" : undefined}
+                    />
+                    <input
+                      id="transformation-height-in"
+                      type="number"
+                      name="heightIn"
+                      value={form.heightIn}
+                      onChange={handleHeightInChange}
+                      min="0"
+                      max="11"
+                      step="0.1"
+                      placeholder="e.g., 9"
+                      className="rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+                      aria-invalid={errors.height ? "true" : "false"}
+                      aria-describedby={errors.height ? "height-error" : undefined}
+                    />
+                  </div>
+                )}
                 {errors.height && (
                   <p id="height-error" className="mt-1 text-sm text-red-600 dark:text-red-400" role="alert">
                     {errors.height}
@@ -374,17 +598,18 @@ function TransformationForm() {
                   htmlFor="transformation-weight"
                   className="block text-sm font-medium text-gray-700 dark:text-gray-300"
                 >
-                  Weight (kg)
+                  Weight {unitSystem === "metric" ? "(kg)" : "(lb)"}
                 </label>
                 <input
                   id="transformation-weight"
                   type="number"
                   name="weight"
                   value={form.weight}
-                  onChange={handleChange}
+                  onChange={handleWeightChange}
                   min="20"
                   max="300"
-                  placeholder="e.g., 70"
+                  step="0.1"
+                  placeholder={unitSystem === "metric" ? "e.g., 70" : "e.g., 154"}
                   className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
                   aria-invalid={errors.weight ? "true" : "false"}
                   aria-describedby={errors.weight ? "weight-error" : undefined}
@@ -426,38 +651,37 @@ function TransformationForm() {
             </div>
 
             <div>
-                <label
-                  htmlFor="transformation-activity"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  General Activity Level
-                </label>
+              <label
+                htmlFor="transformation-activity"
+                className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+              >
+                General Activity Level
+              </label>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 This helps estimate your daily energy requirements. Choose the option closest to your overall lifestyle.
               </p>
-                <select
-                  id="transformation-activity"
-                  name="activity"
-                  value={form.activity}
-                  onChange={handleChange}
-                  className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-                >
-                  <option value="">Select your activity level</option>
-                  {ACTIVITY_LEVELS.map((level) => (
-                    <option key={level.value} value={level.value}>
-                      {level.label} — {level.description}
-                    </option>
-                  ))}
-                </select>
-                {errors.activity && (
-                  <p id="activity-error" className="mt-1 text-sm text-red-600 dark:text-red-400" role="alert">
-                    {errors.activity}
-                  </p>
-                )}
+              <select
+                id="transformation-activity"
+                name="activity"
+                value={form.activity}
+                onChange={handleChange}
+                className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
+              >
+                <option value="">Select your activity level</option>
+                {ACTIVITY_LEVELS.map((level) => (
+                  <option key={level.value} value={level.value}>
+                    {level.label} — {level.description}
+                  </option>
+                ))}
+              </select>
+              {errors.activity && (
+                <p id="activity-error" className="mt-1 text-sm text-red-600 dark:text-red-400" role="alert">
+                  {errors.activity}
+                </p>
+              )}
             </div>
           </div>
 
-          {/* Section Two: Fitness Goals & Activity */}
           <div className="space-y-6 pt-6 border-t border-gray-200 dark:border-gray-700">
             <div className="border-b border-gray-200 dark:border-gray-700 pb-4">
               <h2 className="text-xl font-semibold text-gray-900 dark:text-white">Your Fitness Goals & Activity</h2>
@@ -564,7 +788,6 @@ function TransformationForm() {
             </div>
           </div>
 
-          {/* Section Three: Additional Details (Optional) */}
           <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
             <details className="group">
               <summary className="flex items-center justify-between cursor-pointer list-none">
@@ -573,31 +796,32 @@ function TransformationForm() {
               </summary>
               <div className="mt-4 space-y-6">
                 <div>
-                <label
-                  htmlFor="transformation-waist"
-                  className="block text-sm font-medium text-gray-700 dark:text-gray-300"
-                >
-                  Waist Circumference (cm)
-                </label>
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                  Use a flexible tape around your waist, without compressing the skin. Measure after breathing out normally.
-                </p>
-                <input
-                  id="transformation-waist"
-                  type="number"
-                  name="waistCircumference"
-                    value={form.waistCircumference}
-                    onChange={handleChange}
+                  <label
+                    htmlFor="transformation-waist"
+                    className="block text-sm font-medium text-gray-700 dark:text-gray-300"
+                  >
+                    Waist Circumference {unitSystem === "metric" ? "(cm)" : "(in)"}
+                  </label>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Use a flexible tape around your waist, without compressing the skin. Measure after breathing out normally.
+                  </p>
+                  <input
+                    id="transformation-waist"
+                    type="number"
+                    name="waist"
+                    value={form.waist}
+                    onChange={handleWaistChange}
                     min="40"
                     max="200"
-                    placeholder="e.g., 85"
+                    step="0.1"
+                    placeholder={unitSystem === "metric" ? "e.g., 85" : "e.g., 33.5"}
                     className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
-                    aria-invalid={errors.waistCircumference ? "true" : "false"}
-                    aria-describedby={errors.waistCircumference ? "waist-error" : undefined}
+                    aria-invalid={errors.waist ? "true" : "false"}
+                    aria-describedby={errors.waist ? "waist-error" : undefined}
                   />
-                  {errors.waistCircumference && (
+                  {errors.waist && (
                     <p id="waist-error" className="mt-1 text-sm text-red-600 dark:text-red-400" role="alert">
-                      {errors.waistCircumference}
+                      {errors.waist}
                     </p>
                   )}
                 </div>
@@ -639,7 +863,6 @@ function TransformationForm() {
           </div>
         </form>
       ) : (
-        // Results section - redesigned Fitness & Health Snapshot
         <>
           <div className="flex items-center justify-between mb-6">
             <div>
@@ -656,7 +879,6 @@ function TransformationForm() {
             </button>
           </div>
 
-          {/* Section 1: Body Measurements */}
           <div className="mb-8">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
               <span className="w-8 h-8 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center mr-3">
@@ -665,7 +887,6 @@ function TransformationForm() {
               Body Measurements
             </h3>
             <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-3">
-              {/* BMI Card */}
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
                 <div className="flex items-start justify-between">
                   <div>
@@ -680,7 +901,6 @@ function TransformationForm() {
                 </p>
               </div>
 
-              {/* Weight-for-Height Reference Card */}
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
                 <div className="flex items-start justify-between">
                   <div>
@@ -696,7 +916,6 @@ function TransformationForm() {
                 </p>
               </div>
 
-              {/* Waist-to-Height Ratio Card */}
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
                 <div className="flex items-start justify-between">
                   <div>
@@ -722,7 +941,6 @@ function TransformationForm() {
             </div>
           </div>
 
-          {/* Section 2: Physical Activity */}
           <div className="mb-8">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
               <span className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center mr-3">
@@ -731,15 +949,14 @@ function TransformationForm() {
               Physical Activity
             </h3>
             <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
-              {/* Aerobic Activity Card */}
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
                 <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Aerobic Activity</h4>
                 <p className="mt-2 text-lg font-semibold text-gray-900 dark:text-white">
                   {form.aerobicActivity
-                    ? AEROBIC_DURATION_OPTIONS.find(o => o.value === form.aerobicActivity)?.label
+                    ? AEROBIC_DURATION_OPTIONS.find((o) => o.value === form.aerobicActivity)?.label
                     : "Not provided"}
                 </p>
-                {form.aerobicIntensity && <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Intensity: {AEROBIC_INTENSITY_OPTIONS.find(o => o.value === form.aerobicIntensity)?.label}</p>}
+                {form.aerobicIntensity && <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">Intensity: {AEROBIC_INTENSITY_OPTIONS.find((o) => o.value === form.aerobicIntensity)?.label}</p>}
                 <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700">
                   <p className="text-sm text-gray-700 dark:text-gray-300">
                     <strong>Comparison:</strong> {aerobicComparison.text}
@@ -750,12 +967,11 @@ function TransformationForm() {
                 </p>
               </div>
 
-              {/* Strength Training Card */}
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
                 <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Strength Training</h4>
                 <p className="mt-2 text-lg font-semibold text-gray-900 dark:text-white">
                   {form.strengthFrequency
-                    ? STRENGTH_FREQUENCY_OPTIONS.find(o => o.value === form.strengthFrequency)?.label
+                    ? STRENGTH_FREQUENCY_OPTIONS.find((o) => o.value === form.strengthFrequency)?.label
                     : "Not provided"}
                 </p>
                 <div className="mt-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-900/50 border border-gray-200 dark:border-gray-700">
@@ -770,7 +986,6 @@ function TransformationForm() {
             </div>
           </div>
 
-          {/* Section 3: Energy & Nutrition */}
           <div className="mb-8">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
               <span className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mr-3">
@@ -779,7 +994,6 @@ function TransformationForm() {
               Energy & Nutrition
             </h3>
             <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-3">
-              {/* Calories Card */}
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
                 <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Estimated Daily Maintenance Calories</h4>
                 <p className="mt-2 text-3xl font-bold text-purple-600 dark:text-purple-400">{maintenanceCalories > 0 ? maintenanceCalories : "—"} kcal/day</p>
@@ -790,22 +1004,21 @@ function TransformationForm() {
                 )}
               </div>
 
-              {/* Macronutrients Card */}
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
                 <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Example Macronutrient Distribution</h4>
                 {maintenanceCalories > 0 ? (
                   <div className="mt-2 space-y-2">
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600 dark:text-gray-400">Protein</span>
-                      <span className="font-semibold text-red-600 dark:text-red-400">{protein}g ({(protein*4/maintenanceCalories*100).toFixed(0)}%)</span>
+                      <span className="font-semibold text-red-600 dark:text-red-400">{protein}g ({(protein * 4 / maintenanceCalories * 100).toFixed(0)}%)</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600 dark:text-gray-400">Carbohydrates</span>
-                      <span className="font-semibold text-blue-600 dark:text-blue-400">{carbs}g ({(carbs*4/maintenanceCalories*100).toFixed(0)}%)</span>
+                      <span className="font-semibold text-blue-600 dark:text-blue-400">{carbs}g ({(carbs * 4 / maintenanceCalories * 100).toFixed(0)}%)</span>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-600 dark:text-gray-400">Fat</span>
-                      <span className="font-semibold text-yellow-600 dark:text-yellow-400">{fat}g ({(fat*9/maintenanceCalories*100).toFixed(0)}%)</span>
+                      <span className="font-semibold text-yellow-600 dark:text-yellow-400">{fat}g ({(fat * 9 / maintenanceCalories * 100).toFixed(0)}%)</span>
                     </div>
                   </div>
                 ) : (
@@ -814,7 +1027,6 @@ function TransformationForm() {
                 <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Illustrative 25/45/30 split. Individual needs vary by goals and preferences.</p>
               </div>
 
-              {/* Hydration Card */}
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
                 <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">General Hydration Estimate</h4>
                 <p className="mt-2 text-3xl font-bold text-blue-600 dark:text-blue-400">{waterIntake > 0 ? waterIntake.toFixed(1) : "—"} L/day</p>
@@ -823,7 +1035,6 @@ function TransformationForm() {
             </div>
           </div>
 
-          {/* Section 4: Exercise Intensity */}
           <div className="mb-8">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
               <span className="w-8 h-8 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center mr-3">
@@ -832,14 +1043,12 @@ function TransformationForm() {
               Exercise Intensity
             </h3>
             <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-3">
-              {/* Max HR Card */}
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
                 <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Estimated Maximum Heart Rate</h4>
                 <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{estimatedMaxHR > 0 ? `${estimatedMaxHR} bpm` : "—"}</p>
                 <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Based on 220 − age. Population-level prediction; actual max HR varies significantly.</p>
               </div>
 
-              {/* Moderate Intensity Card */}
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700 border-l-4 border-emerald-500">
                 <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Moderate Intensity</h4>
                 <p className="mt-2 text-2xl font-bold text-emerald-600 dark:text-emerald-400">
@@ -849,7 +1058,6 @@ function TransformationForm() {
                 <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">~50–70% of estimated max HR.</p>
               </div>
 
-              {/* Vigorous Intensity Card */}
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700 border-l-4 border-red-500">
                 <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Vigorous Intensity</h4>
                 <p className="mt-2 text-2xl font-bold text-red-600 dark:text-red-400">
@@ -861,7 +1069,6 @@ function TransformationForm() {
             </div>
           </div>
 
-          {/* Educational explanation */}
           <div className="mt-6">
             <ResultExplanation
               whatItMeans={
@@ -872,8 +1079,8 @@ function TransformationForm() {
                   Your weight-for-height reference range of {idealWeightMin > 0 ? `${idealWeightMin.toFixed(1)}–${idealWeightMax.toFixed(1)} kg` : "—"} 
                   is based on the adult BMI interval 18.5–24.9. 
                   {waistToHeightRatio ? `Your waist-to-height ratio of ${waistToHeightRatio} ` : "Waist-to-height ratio was not calculated (optional waist measurement not provided)."}
-                  <strong>Physical Activity:</strong> Your reported aerobic activity ({form.aerobicActivity ? AEROBIC_DURATION_OPTIONS.find(o => o.value === form.aerobicActivity)?.label.toLowerCase() : "not provided"}) 
-                  and strength training frequency ({form.strengthFrequency ? STRENGTH_FREQUENCY_OPTIONS.find(o => o.value === form.strengthFrequency)?.label.toLowerCase() : "not provided"}) 
+                  <strong>Physical Activity:</strong> Your reported aerobic activity ({form.aerobicActivity ? AEROBIC_DURATION_OPTIONS.find((o) => o.value === form.aerobicActivity)?.label.toLowerCase() : "not provided"})
+                  and strength training frequency ({form.strengthFrequency ? STRENGTH_FREQUENCY_OPTIONS.find((o) => o.value === form.strengthFrequency)?.label.toLowerCase() : "not provided"})
                   are compared with general adult guidelines. 
                   <strong>Energy & Nutrition:</strong> Estimated daily maintenance calories of {maintenanceCalories > 0 ? maintenanceCalories : "not available"} kcal/day 
                   (Mifflin–St Jeor × activity factor). {maintenanceCalories > 0 ? `Example macronutrient distribution of ${protein}g protein / ${carbs}g carbs / ${fat}g fat (25%/45%/30% split).` : "Macronutrient distribution requires a valid maintenance calorie estimate."} General hydration estimate of {waterIntake > 0 ? waterIntake.toFixed(1) : "not available"} L/day. 
@@ -918,7 +1125,6 @@ function TransformationForm() {
             />
           </div>
 
-          {/* Health Disclaimer */}
           <div className="mt-6">
             <HealthDisclaimer
               universalDisclaimer={
@@ -955,7 +1161,6 @@ function TransformationForm() {
             />
           </div>
 
-          {/* Goal-Based Service Integration CTA */}
           <div className="mt-8 rounded-xl border border-blue-200 bg-blue-50 p-6 shadow-sm dark:border-blue-800 dark:bg-blue-900/20">
             <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">What Would You Like to Work On Next?</h3>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
@@ -963,30 +1168,23 @@ function TransformationForm() {
             </p>
 
             <div className="space-y-4">
-              {/* Selected Goal */}
               <div>
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Your selected goal:</p>
                 <p className="mt-1 text-gray-900 dark:text-white">{form.primaryGoal ? GOAL_LABELS[form.primaryGoal] : "Not selected"}</p>
               </div>
 
-              {/* Suggested Service Category */}
               <div>
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Suggested NutriSculpt service:</p>
                 <div className="mt-2 flex items-center justify-between gap-4">
                   <div className="flex-1">
-                    {(() => {
-                      const category = ENQUIRY_SERVICE_OPTIONS.find((o) => o.value === selectedServiceCategory);
-                      return (
-                        <div>
-                          <p className="font-semibold text-gray-900 dark:text-white">{category?.label || "Select a category"}</p>
-                          <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
-                            {selectedServiceCategory !== "not-sure"
-                              ? SERVICE_CATEGORIES.find((c) => c.slug === selectedServiceCategory)?.shortDescription || ""
-                              : "Let us help you find the right coaching approach for your needs."}
-                          </p>
-                        </div>
-                      );
-                    })()}
+                    <div>
+                      <p className="font-semibold text-gray-900 dark:text-white">{(() => { const category = ENQUIRY_SERVICE_OPTIONS.find((o) => o.value === selectedServiceCategory); return category?.label || "Select a category"; })()}</p>
+                      <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
+                        {selectedServiceCategory !== "not-sure"
+                          ? (() => { const c = SERVICE_CATEGORIES.find((c) => c.slug === selectedServiceCategory); return c?.shortDescription || ""; })()
+                          : "Let us help you find the right coaching approach for your needs."}
+                      </p>
+                    </div>
                   </div>
                   <select
                     value={selectedServiceCategory}
@@ -1002,7 +1200,6 @@ function TransformationForm() {
                 </div>
               </div>
 
-              {/* CTA Buttons */}
               <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:justify-center">
                 <Link
                   href={`/expert-connect?category=${encodeURIComponent(selectedServiceCategory)}&goal=${encodeURIComponent(form.primaryGoal)}&source=${encodeURIComponent(resolvedSource)}&back=${encodeURIComponent("/transformation")}`}

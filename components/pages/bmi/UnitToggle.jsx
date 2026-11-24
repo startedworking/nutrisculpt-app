@@ -6,16 +6,17 @@ const UnitToggle = ({ unitSystem, onUnitChange }) => (
       { key: "metric", label: "Metric", fullLabel: "Metric (kg, cm)" },
       { key: "imperial", label: "Imperial", fullLabel: "Imperial (lb, ft/in)" },
     ].map(({ key, label, fullLabel }) => (
-      <button
-        key={key}
-        className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md transition-all ${
-          unitSystem === key
-            ? "bg-white text-gray-900 shadow dark:bg-gray-900 dark:text-white"
-            : "text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
-        }`}
-        onClick={() => onUnitChange(key)}
-        title={fullLabel}
-      >
+        <button
+          key={key}
+          className={`px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium rounded-md transition-all ${
+            unitSystem === key
+              ? "bg-white text-gray-900 shadow dark:bg-gray-900 dark:text-white"
+              : "text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white"
+          }`}
+          onClick={() => onUnitChange(key)}
+              title={fullLabel}
+              aria-pressed={unitSystem === key}
+        >
         <span className="sm:hidden">{label}</span>
         <span className="hidden sm:inline">{fullLabel}</span>
       </button>
