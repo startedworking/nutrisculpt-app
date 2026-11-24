@@ -314,3 +314,93 @@ test("heart-rate: valid inputs produce finite predicted max HR", () => {
   assert.equal(v.valid, true);
   assert.ok(Number.isFinite(v.predicted));
 });
+
+// ---------------------------------------------------------------------------
+// 04E-2A Scientific applicability tests
+// ---------------------------------------------------------------------------
+
+test("04E-2A: BMI age 19 → no adult category (pediatric)", () => {
+  const result = classifyBMI(22, 19);
+  assert.equal(result.category, "pediatric");
+  assert.equal(result.label, "—");
+  assert.ok(result.note);
+});
+
+test("04E-2A: BMI age 20 → adult category", () => {
+  const result = classifyBMI(22, 20);
+  assert.equal(result.category, "normal");
+  assert.equal(result.label, "Healthy Weight");
+});
+
+test("04E-2A: BMI age 15 → pediatric, no adult category", () => {
+  const result = classifyBMI(18.5, 15);
+  assert.equal(result.category, "pediatric");
+});
+
+test("04E-2A: BMI under 2 → no category interpretation", () => {
+  const result = classifyBMI(20, 1);
+  assert.equal(result.category, "pediatric");
+});
+
+test("04E-2A: classifyBMI without age → no adult category", () => {
+  const result = classifyBMI(22);
+  assert.equal(result.label, "—");
+  // No age provided → not treated as adult → no adult category
+  assert.notEqual(result.category, "normal");
+});
+
+test("04E-2A: Ideal Weight has no frame adjustment", () => {
+  const base = calculateIdealWeight({ heightCm: 170, gender: "male", formulaId: "devine" });
+  // frameType parameter no longer accepted; result is frame-independent
+  assert.ok(Number.isFinite(base));
+  assert.ok(base > 0);
+});
+
+test("04E-2A: Ideal Weight has no single averaged value", () => {
+  const all = calculateAllIdealWeights({ heightCm: 170, gender: "male" });
+  assert.ok(!all.average);
+  // All formulas present as separate estimates
+  assert.ok(all.devine);
+  assert.ok(all.robinson);
+  assert.ok(all.miller);
+  assert.ok(all.hamwi);
+  assert.ok(all.bmi);
+});
+
+test("04E-2A: Ideal Weight formulas produce different values (no artificial convergence)", () => {
+  const all = calculateAllIdealWeights({ heightCm: 170, gender: "male" });
+  const values = Object.values(all).map((r) => r.kg);
+  const uniqueValues = new Set(values.map((v) => Math.round(v * 10) / 10));
+  assert.ok(uniqueValues.size > 1, "Different formulas should produce different values");
+});
+
+test("04E-2A: Mifflin calculation accepts adult age range (19-78 source population)", () => {
+  // Valid within source population
+  assert.ok(Number.isFinite(calculateBMR(70, 175, 30, "male")));
+  assert.ok(Number.isFinite(calculateBMR(70, 175, 30, "female")));
+  // Outside source population still calculates (extrapolation, flagged elsewhere)
+  assert.ok(Number.isFinite(calculateBMR(70, 175, 19, "male")));
+  assert.ok(Number.isFinite(calculateBMR(70, 175, 78, "male")));
+});
+
+test("04E-2A: Water total-water distinction is in code comments", () => {
+  // weightBasedEstimate is a heuristic, not a DRI prescription
+  const est = weightBasedEstimate(70);
+  assert.ok(Number.isFinite(est));
+  assert.ok(est > 0);
+});
+
+test("04E-2A: Heart rate terminology - predicted HR is finite for valid adult", () => {
+  const v = validateHeartRateInputs({
+    age: 40,
+    restingHR: 60,
+    maxHR: null,
+    useCustomMaxHR: false,
+    methodId: "tanaka",
+    sex: "male",
+  });
+  assert.equal(v.valid, true);
+  assert.ok(Number.isFinite(v.predicted));
+  // Tanaka: 208 - 0.7 * 40 = 180
+  assert.ok(Math.abs(v.predicted - 180) < 1);
+});

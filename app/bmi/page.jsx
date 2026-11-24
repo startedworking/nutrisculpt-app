@@ -96,15 +96,15 @@ export default function BmiCalculator() {
 
   const classification = useMemo(() => {
     if (bmi == null) return { label: "—", color: "text-gray-500" };
-    return classifyBMI(bmi);
-  }, [bmi]);
+    return classifyBMI(bmi, age);
+  }, [bmi, age]);
   const { label, color, obesityClass } = classification;
   const healthyRange = useMemo(() => {
     if (height.cm == null) return null;
     return bmiHealthyRange(height.cm);
   }, [height.cm]);
 
-  const isAdult = Number.isFinite(age) && age >= 18;
+  const isAdult = Number.isFinite(age) && age >= 20;
 
   // Prepare share data for BMI results
   const shareResult = useMemo(() => {
@@ -226,11 +226,11 @@ export default function BmiCalculator() {
         <div className="mt-6">
           <div className="rounded-lg bg-blue-50 p-4 text-sm text-blue-900 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/40 dark:text-blue-200 dark:ring-blue-900/40">
             <p>
-              BMI is a screening tool for adults (age 18 and older) and does
+              BMI is a screening measure for adults (age 20 and older) and does
               not diagnose body fatness or health. It may not be accurate for
-              athletes, elderly, or pregnant women. BMI categories for children
-              and teenagers are age- and sex-specific. Consult a healthcare
-              professional for personalized advice.
+              athletes, older adults, or pregnant women. BMI categories for
+              children and teenagers are age- and sex-specific. Consult a
+              healthcare professional for personalized advice.
             </p>
           </div>
         </div>
@@ -339,9 +339,9 @@ export default function BmiCalculator() {
             ) : (
               <div className="text-center py-8">
                 <p className="text-gray-600 dark:text-gray-300">
-                  BMI categories are intended for adults age 18 and older.
-                  Please enter an age of 18 or above to see your
-                  classification.
+                  {Number.isFinite(age) && age > 0 && age < 20
+                    ? "BMI categories are intended for adults age 20 and older. Ages 2-19 require sex- and age-specific BMI-for-age percentile interpretation, which is not yet available here."
+                    : "Please enter an age of 20 or above to see your adult BMI classification."}
                 </p>
               </div>
             )}

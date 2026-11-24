@@ -71,10 +71,19 @@ function TransformationForm() {
   // Restore a completed Transformation snapshot from session storage on mount.
   // Runs only on the client, so SSR/initial render stays a blank form with no
   // hydration mismatch. Corrupted or stale storage is safely ignored.
+  //
+  // The current comprehensive snapshot uses adult reference methods and is
+  // designed for ages 20 and above. A restored session with age below 20 must
+  // not display an adult snapshot: clear it and return to the input state.
   useEffect(() => {
     const stored = readTransformationSession();
     if (!stored) return;
     const { unitSystem, inputs } = stored;
+    const restoredAge = parseFloat(inputs.age);
+    if (!Number.isFinite(restoredAge) || restoredAge < 20) {
+      clearTransformationSession();
+      return;
+    }
     setUnitSystem(unitSystem);
     setCanonical({
       weightKg: inputs.weightKg,
@@ -287,6 +296,15 @@ function TransformationForm() {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (validateForm()) {
+      const ageNum = parseFloat(form.age);
+      if (!Number.isFinite(ageNum) || ageNum < 20) {
+        setErrors((e) => ({
+          ...e,
+          age:
+            "The current comprehensive snapshot uses adult reference methods and is designed for ages 20 and above. Please enter an age of 20 or older.",
+        }));
+        return;
+      }
       const suggestedCategory = GOAL_TO_SERVICE_MAP[form.primaryGoal] || "not-sure";
       setSelectedServiceCategory(suggestedCategory);
       const payload = createTransformationSessionPayload({
@@ -374,7 +392,7 @@ function TransformationForm() {
   const idealWeightMax = h > 0 ? 24.9 * h * h : 0;
   const hasGender = form.gender === "male" || form.gender === "female";
   const hasActivity = !!form.activity;
-  const bmr = hasGender && ageNum && heightCm && weightKg
+  const rmr = hasGender && ageNum && heightCm && weightKg
     ? form.gender === "male"
       ? 10 * weightKg + 6.25 * heightCm - 5 * ageNum + 5
       : 10 * weightKg + 6.25 * heightCm - 5 * ageNum - 161
@@ -388,12 +406,12 @@ function TransformationForm() {
         veryActive: 1.9,
       }[form.activity]
     : 0;
-  const maintenanceCalories = bmr > 0 && activityFactor > 0 ? Math.round(bmr * activityFactor) : 0;
+  const maintenanceCalories = rmr > 0 && activityFactor > 0 ? Math.round(rmr * activityFactor) : 0;
   const protein = maintenanceCalories > 0 ? Math.round((maintenanceCalories * 0.25) / 4) : 0;
   const carbs = maintenanceCalories > 0 ? Math.round((maintenanceCalories * 0.45) / 4) : 0;
   const fat = maintenanceCalories > 0 ? Math.round((maintenanceCalories * 0.3) / 9) : 0;
   const estimatedMaxHR = ageNum ? 220 - ageNum : 0;
-  const waterIntake = weightKg ? weightKg * 0.033 : 0;
+  const waterReference = weightKg ? weightKg * 0.033 : 0;
   const hrZones = [
     {
       name: "Very Light",
@@ -498,21 +516,21 @@ function TransformationForm() {
   const strengthComparison = getStrengthComparison();
 
   const getBMICategory = () => {
-    if (!bmi || !form.age || form.age < 18) return null;
+    if (!bmi || !form.age || form.age < 20) return null;
     if (bmi < 18.5) return "Underweight";
-    if (bmi < 25) return "Healthy weight";
+    if (bmi < 25) return "Healthy Weight";
     if (bmi < 30) return "Overweight";
     if (bmi < 35) return "Obesity Class 1";
     if (bmi < 40) return "Obesity Class 2";
-    return "Obesity Class 3";
+    return "Obesity Class 3 / Severe Obesity";
   };
 
   const bmiCategory = getBMICategory();
 
   const getWaistToHeightInterpretation = () => {
     if (!waistToHeightRatioRaw) return null;
-    if (!bmi || !form.age || form.age < 18)
-      return { category: null, note: "Not interpreted for children or when BMI is unavailable." };
+    if (!bmi || !form.age || form.age < 20)
+      return { category: null, note: "Not interpreted for ages below 20 or when BMI is unavailable." };
     if (bmi >= 35) return { category: null, bmiNote: true };
     if (waistToHeightRatioRaw >= 0.60) return { category: "High central adiposity" };
     if (waistToHeightRatioRaw >= 0.50) return { category: "Increased central adiposity" };
@@ -1062,10 +1080,10 @@ function TransformationForm() {
             </h3>
             <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-3">
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
-                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Estimated Daily Maintenance Calories</h4>
+                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Estimated Maintenance Calories</h4>
                 <p className="mt-2 text-3xl font-bold text-purple-600 dark:text-purple-400">{maintenanceCalories > 0 ? maintenanceCalories : "—"} kcal/day</p>
                 {maintenanceCalories > 0 ? (
-                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Mifflin–St Jeor × activity factor. Estimated maintenance, not a dietary prescription.</p>
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Mifflin–St Jeor resting energy estimate × activity factor. Estimated maintenance, not a dietary prescription.</p>
                 ) : (
                   <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Please provide your equation-specific input and activity level to calculate maintenance calories.</p>
                 )}
@@ -1095,9 +1113,9 @@ function TransformationForm() {
               </div>
 
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
-                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">General Hydration Estimate</h4>
-                <p className="mt-2 text-3xl font-bold text-blue-600 dark:text-blue-400">{waterIntake > 0 ? waterIntake.toFixed(1) : "—"} L/day</p>
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">~33 ml/kg body weight. Needs vary with activity, climate, health. Medical conditions may require individualized guidance.</p>
+                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Water Intake Reference</h4>
+                <p className="mt-2 text-3xl font-bold text-blue-600 dark:text-blue-400">{waterReference > 0 ? waterReference.toFixed(1) : "—"} L/day</p>
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Approximate ~33 ml/kg body weight heuristic. Total water reference from beverages and food, not an individual prescription.</p>
               </div>
             </div>
           </div>
@@ -1113,7 +1131,7 @@ function TransformationForm() {
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
                 <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Estimated Maximum Heart Rate</h4>
                 <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{estimatedMaxHR > 0 ? `${estimatedMaxHR} bpm` : "—"}</p>
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Based on 220 − age. Population-level prediction; actual max HR varies significantly.</p>
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Predicted using 220 − age. Population-level estimate; actual max HR varies significantly.</p>
               </div>
 
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700 border-l-4 border-emerald-500">
@@ -1148,10 +1166,10 @@ function TransformationForm() {
                   {waistToHeightRatio ? `Your waist-to-height ratio of ${waistToHeightRatio} ` : "Waist-to-height ratio was not calculated (optional waist measurement not provided)."}
                   <strong>Physical Activity:</strong> Your reported aerobic activity ({form.aerobicActivity ? AEROBIC_DURATION_OPTIONS.find((o) => o.value === form.aerobicActivity)?.label.toLowerCase() : "not provided"})
                   and strength training frequency ({form.strengthFrequency ? STRENGTH_FREQUENCY_OPTIONS.find((o) => o.value === form.strengthFrequency)?.label.toLowerCase() : "not provided"})
-                  are compared with general adult guidelines. 
-                  <strong>Energy & Nutrition:</strong> Estimated daily maintenance calories of {maintenanceCalories > 0 ? maintenanceCalories : "not available"} kcal/day 
-                  (Mifflin–St Jeor × activity factor). {maintenanceCalories > 0 ? `Example macronutrient distribution of ${protein}g protein / ${carbs}g carbs / ${fat}g fat (25%/45%/30% split).` : "Macronutrient distribution requires a valid maintenance calorie estimate."} General hydration estimate of {waterIntake > 0 ? waterIntake.toFixed(1) : "not available"} L/day. 
-                  <strong>Exercise Intensity:</strong> Estimated max HR {estimatedMaxHR > 0 ? estimatedMaxHR + " bpm" : "—"} (220 − age), 
+                  are compared with general adult guidelines.
+                  <strong>Energy & Nutrition:</strong> Estimated daily maintenance calories of {maintenanceCalories > 0 ? maintenanceCalories : "not available"} kcal/day
+                  (Mifflin–St Jeor resting energy estimate × activity factor). {maintenanceCalories > 0 ? `Example macronutrient distribution of ${protein}g protein / ${carbs}g carbs / ${fat}g fat (25%/45%/30% split).` : "Macronutrient distribution requires a valid maintenance calorie estimate."} General hydration estimate of {waterReference > 0 ? waterReference.toFixed(1) : "not available"} L/day.
+                  <strong>Exercise Intensity:</strong> Predicted max HR {estimatedMaxHR > 0 ? estimatedMaxHR + " bpm" : "—"} (220 − age),
                   moderate range {moderateHRRange ? moderateHRRange.min + "–" + moderateHRRange.max + " bpm" : "—"}, 
                   vigorous range {vigorousHRRange ? vigorousHRRange.min + "–" + vigorousHRRange.max + " bpm" : "—"}.
                 </>
@@ -1172,14 +1190,14 @@ function TransformationForm() {
                   athletes with high muscle mass, or conditions affecting fluid balance. 
                   Waist-to-height ratio: NICE guidance (ratio &gt;=0.5) applies to adults with BMI &lt;35; it is not a diagnosis of cardiovascular disease or diabetes.
                   <br /><br />
-                  <strong>Physical Activity:</strong> Comparisons use approximate duration ranges and broad intensity categories. 
-                  Exact moderate-equivalent minutes are not calculated when intensity breakdown is unavailable. 
-                  Strength frequency alone doesn&apos;t confirm all guideline requirements (muscle groups, effort matter). 
+                  <strong>Physical Activity:</strong> Comparisons use approximate duration ranges and broad intensity categories.
+                  Exact moderate-equivalent minutes are not calculated when intensity breakdown is unavailable.
+                  Strength frequency alone doesn&apos;t confirm all guideline requirements (muscle groups, effort matter).
                   Age-specific guidance for minors/older adults is not implemented here.
                   <br /><br />
-                  <strong>Energy & Nutrition:</strong> Calorie estimate uses Mifflin–St Jeor (1990) with population-average activity multipliers. 
-                  Not a weight-loss/gain prescription. Macronutrient split (25/45/30%) is illustrative only. 
-                  Hydration (~33 ml/kg) is a rough approximation; heart failure, kidney disease, or fluid restrictions require medical guidance.
+                  <strong>Energy & Nutrition:</strong> Calorie estimate uses Mifflin–St Jeor (1990) resting energy estimate with population-average activity multipliers.
+                  Not a weight-loss/gain prescription. Macronutrient split (25/45/30%) is illustrative only.
+                  Hydration (~33 ml/kg) is a rough heuristic; total water includes water from beverages and food. Heart failure, kidney disease, or fluid restrictions require medical guidance.
                   <br /><br />
                   <strong>Exercise Intensity:</strong> Max HR (220 - age) is a population prediction; actual varies significantly. 
                   Zone percentages are general ranges, not measured thresholds. 

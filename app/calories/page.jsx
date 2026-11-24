@@ -318,7 +318,8 @@ export default function CalorieCalculator() {
               <div className="rounded-lg bg-blue-50 p-4 text-sm text-blue-900 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/40 dark:text-blue-200 dark:ring-blue-900/40">
                 <p className="font-medium mb-1">Mifflin–St Jeor Equation</p>
                 <p className="text-sm">
-                  BMR = 10 × weight + 6.25 × height − 5 × age + sex coefficient.
+                  Mifflin–St Jeor estimates resting energy expenditure (RMR/REE), not basal metabolic rate (BMR):
+                  RMR = 10 × weight + 6.25 × height − 5 × age + sex coefficient.
                   The sex coefficient is{" "}
                   <span className="font-semibold">{sexCoefficient}</span>{" "}
                   for {sexCoefficientLabel}. This is a biological variable in
@@ -407,9 +408,9 @@ export default function CalorieCalculator() {
               transition={{ duration: 0.6, delay: 0.4 }}
               className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
             >
-              <div className="text-center">
+                <div className="text-center">
                 <h3 className="mb-4 text-lg font-semibold">
-                  Basal Metabolic Rate
+                  Resting Metabolic Rate
                 </h3>
                 <div className="mb-4">
                   <p className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-400">
@@ -420,7 +421,7 @@ export default function CalorieCalculator() {
                   </p>
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  Calories burned at rest
+                  Estimated resting energy expenditure
                 </p>
               </div>
             </motion.div>

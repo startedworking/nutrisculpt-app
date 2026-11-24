@@ -204,10 +204,10 @@ export default function WaterIntakeCalculator() {
         className="mb-8 text-center"
       >
         <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-          Daily Water Intake Calculator
+          Daily Water Intake Reference
         </h2>
         <p className="mt-3 text-gray-600 dark:text-gray-300">
-          Calculate your personalized daily water intake needs
+          Adult population water reference from beverages and food
         </p>
       </motion.div>
 

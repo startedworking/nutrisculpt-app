@@ -36,19 +36,15 @@ const conversions = {
   ftInToCm: (ft, inches) => round((ft * 12 + inches) * 2.54, 1),
 };
 
-// Body frame types (for UI selection only — adjustments are not scientifically validated)
-const FRAME_TYPES = [
-  { value: "small", label: "Small Frame" },
-  { value: "medium", label: "Medium Frame" },
-  { value: "large", label: "Large Frame" },
-];
+// Body frame types were previously offered for UI selection, but frame-size
+// adjustments (±10%) have no defensible primary scientific source and are
+// not applied to any reference-weight output.
 
 export default function IdealWeightCalculator() {
   const [unitSystem, setUnitSystem] = useState("metric");
   // No calculation-affecting defaults: every input starts blank/unselected.
   const [gender, setGender] = useState("");
   const [age, setAge] = useState(null);
-  const [frameType, setFrameType] = useState("");
 
   // Store both metric and imperial values; null = blank / not provided.
   const [height, setHeight] = useState({ cm: null, ft: null, in: null });
@@ -97,15 +93,13 @@ export default function IdealWeightCalculator() {
     return calculateAllIdealWeights({
       heightCm: height.cm,
       gender,
-      frameType,
     });
-  }, [height.cm, gender, frameType]);
+  }, [height.cm, gender]);
 
-  // Remove the BMI method from historical list since it's the primary reference
+  // Present formulas as separate reference estimates (no single averaged value)
   const historicalList = useMemo(() => {
     if (!historicalWeights) return {};
-    const { bmi, average, ...rest } = historicalWeights;
-    return rest;
+    return historicalWeights;
   }, [historicalWeights]);
 
   // Healthy weight range (BMI 18.5-24.9)
@@ -148,13 +142,13 @@ export default function IdealWeightCalculator() {
         className="mb-8 text-center"
       >
         <h2 className="text-3xl font-extrabold tracking-tight sm:text-4xl">
-          Ideal Weight Calculator
+          Reference Weight Estimates
         </h2>
           <p className="mt-3 text-gray-600 dark:text-gray-300">
-            Calculate your ideal body weight using multiple scientific formulas
+            Historical population-level reference formulas, not a personal target weight
           </p>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Example values shown — enter your own data for personalized results
+            Different formulas can produce different values. Enter your own data for reference estimates.
           </p>
       </motion.div>
 
@@ -245,37 +239,6 @@ export default function IdealWeightCalculator() {
                 </div>
               </div>
             )}
-          </div>
-
-          {/* Frame Type */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Body Frame</h3>
-            
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Frame Type
-              </label>
-              <select
-                value={frameType}
-                onChange={(e) => setFrameType(e.target.value)}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              >
-                {FRAME_TYPES.map((frame) => (
-                  <option key={frame.value} value={frame.value}>
-                    {frame.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="rounded-lg bg-blue-50 p-4 text-sm text-blue-900 dark:bg-blue-950/40 dark:text-blue-200">
-              <p className="font-medium mb-2">How to determine your frame:</p>
-              <ul className="space-y-1 text-xs">
-                <li>• <strong>Small:</strong> Wrist circumference less than 6.25&quot; (men) or 5.5&quot; (women)</li>
-                <li>• <strong>Medium:</strong> Wrist circumference 6.25-7&quot; (men) or 5.5-6.25&quot; (women)</li>
-                <li>• <strong>Large:</strong> Wrist circumference over 7&quot; (men) or 6.25&quot; (women)</li>
-              </ul>
-            </div>
           </div>
         </div>
       </motion.div>

@@ -272,7 +272,7 @@ export default function HeartRateZoneCalculator() {
 
           {/* Max Heart Rate Configuration */}
           <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Maximum Heart Rate</h3>
+            <h3 className="text-lg font-semibold">Estimated Maximum Heart Rate</h3>
             
             {/* Method Selection */}
             <div>

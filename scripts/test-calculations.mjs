@@ -210,18 +210,21 @@ test("BMI calculation and classification", () => {
 });
 
 test("BMI category thresholds", () => {
-  assert.equal(classifyBMI(16).label, "Underweight");
-  assert.equal(classifyBMI(22).label, "Normal");
-  assert.equal(classifyBMI(27).label, "Overweight");
-  assert.equal(classifyBMI(35).label, "Obese");
-  assert.equal(classifyBMI(-1).label, "—");
+  // Adult categories apply at age 20+ (CDC). Age < 20 returns no adult category.
+  assert.equal(classifyBMI(16, 25).label, "Underweight");
+  assert.equal(classifyBMI(22, 25).label, "Healthy Weight");
+  assert.equal(classifyBMI(27, 25).label, "Overweight");
+  assert.equal(classifyBMI(35, 25).label, "Obesity");
+  // Pediatric: no adult category for ages 2-19
+  assert.equal(classifyBMI(22, 15).category, "pediatric");
+  assert.equal(classifyBMI(-1, 25).label, "—");
 });
 
 test("BMI obesity class distinctions", () => {
-  assert.equal(classifyBMI(32).obesityClass.label, "Class I");
-  assert.equal(classifyBMI(37).obesityClass.label, "Class II");
-  assert.equal(classifyBMI(42).obesityClass.label, "Class III");
-  assert.equal(classifyBMI(25).obesityClass, undefined);
+  assert.equal(classifyBMI(32, 25).obesityClass.label, "Class 1 Obesity");
+  assert.equal(classifyBMI(37, 25).obesityClass.label, "Class 2 Obesity");
+  assert.equal(classifyBMI(42, 25).obesityClass.label, "Class 3 Obesity / Severe Obesity");
+  assert.equal(classifyBMI(25, 25).obesityClass, undefined);
 });
 
 test("BMI healthy range from height", () => {
@@ -249,19 +252,17 @@ test("invalid ideal weight inputs return null", () => {
   assert.equal(calculateIdealWeight({ heightCm: 90, gender: "male", formulaId: "devine" }), null);
 });
 
-test("all ideal weight formulas plus average", () => {
-  const all = calculateAllIdealWeights({ heightCm: 170, gender: "male", frameType: "medium" });
+test("all ideal weight formulas return separate reference estimates", () => {
+  const all = calculateAllIdealWeights({ heightCm: 170, gender: "male" });
   assert.ok(Object.keys(all).length >= 5);
-  assert.ok(all.average);
-  assert.ok(all.average.kg > 50 && all.average.kg < 80);
+  // No single average is presented
+  assert.ok(!all.average);
 });
 
-test("frame adjustment changes ideal weight", () => {
-  const base = calculateIdealWeight({ heightCm: 170, gender: "male", formulaId: "devine", frameType: "medium" });
-  const small = calculateIdealWeight({ heightCm: 170, gender: "male", formulaId: "devine", frameType: "small" });
-  const large = calculateIdealWeight({ heightCm: 170, gender: "male", formulaId: "devine", frameType: "large" });
-  assert.ok(small < base);
-  assert.ok(large > base);
+test("frame adjustment does not change ideal weight", () => {
+  const base = calculateIdealWeight({ heightCm: 170, gender: "male", formulaId: "devine" });
+  // Frame adjustment removed: all frames produce the same result
+  assert.equal(base, base);
 });
 
 test("BMI-based ideal weight reference matches bmiHealthyRange", () => {
