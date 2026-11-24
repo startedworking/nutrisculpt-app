@@ -20,6 +20,7 @@ import {
   estimateOneRM,
   estimateAllOneRM,
   oneRmReliability,
+  evaluateOneRmInputPolicy,
   parseFiniteNumber,
 } from "@/lib/calculators.mjs";
 
@@ -76,8 +77,10 @@ export default function OneRMCalculator() {
 
   const weightKg = weight.kg;
   const weightValid = Number.isFinite(weightKg) && weightKg > 0;
-  const repsValid = Number.isFinite(reps) && reps >= 1 && reps <= 20;
-  const inputsValid = weightValid && repsValid;
+  const repsInteger = Number.isInteger(reps);
+  const policy = evaluateOneRmInputPolicy(reps);
+  const repsValid = repsInteger && reps >= 1;
+  const inputsValid = weightValid && repsValid && policy.allowed;
 
   const reliability = useMemo(
     () => (repsValid ? oneRmReliability(reps) : null),
@@ -238,7 +241,8 @@ export default function OneRMCalculator() {
             type="number"
             placeholder="5"
             min="1"
-            max="20"
+            max="15"
+            step="1"
           />
         </div>
 
@@ -249,7 +253,12 @@ export default function OneRMCalculator() {
         )}
         {!repsValid && (
           <p className="mt-2 text-xs text-red-600 dark:text-red-400">
-            Enter a repetition count between 1 and 20.
+            Enter a whole repetition count between 1 and 15.
+          </p>
+        )}
+        {repsValid && policy.level === "unsupported" && (
+          <p className="mt-2 text-xs text-red-600 dark:text-red-400">
+            {policy.note}
           </p>
         )}
 

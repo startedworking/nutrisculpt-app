@@ -52,6 +52,10 @@ export default function IdealWeightCalculator() {
   // Share functionality
   const { shareableCardRef, generateImage, generateShareData, validateResultForPrivacy } = useShareableImage('ideal-weight');
 
+  // Adult applicability: adult BMI reference and historical adult formulas
+  // are intended for ages 20 and above.
+  const isAdult = Number.isFinite(age) && age >= 20;
+
   // Height handlers — convert only finite values; partial ft/in stays blank.
   const handleHeightChange = (value, unit) => {
     const parsed = parseFiniteNumber(value);
@@ -79,33 +83,43 @@ export default function IdealWeightCalculator() {
     }
   };
 
-  // Primary result: BMI-based weight-for-height reference (BMI = 22)
+  // Primary result: BMI-based weight-for-height reference (BMI = 22).
+  // Works without sex; gated to adults (20+).
   const referenceWeight = useMemo(() => {
+    if (!isAdult || height.cm == null) return null;
     return calculateIdealWeight({
       heightCm: height.cm,
       gender,
       formulaId: "bmi",
     });
-  }, [height.cm, gender]);
+  }, [isAdult, height.cm, gender]);
 
-  // Historical formulas for educational comparison only
+  // Healthy weight range (BMI 18.5-24.9). Works without sex; gated to adults.
+  const healthyRange = useMemo(() => {
+    if (!isAdult || height.cm == null) return null;
+    return idealWeightHealthyRange(height.cm);
+  }, [isAdult, height.cm]);
+
+  // Historical formulas for educational comparison only — require explicit sex.
   const historicalWeights = useMemo(() => {
+    if (
+      !isAdult ||
+      height.cm == null ||
+      (gender !== "male" && gender !== "female")
+    ) {
+      return {};
+    }
     return calculateAllIdealWeights({
       heightCm: height.cm,
       gender,
     });
-  }, [height.cm, gender]);
+  }, [isAdult, height.cm, gender]);
 
   // Present formulas as separate reference estimates (no single averaged value)
   const historicalList = useMemo(() => {
-    if (!historicalWeights) return {};
+    if (!historicalWeights || Object.keys(historicalWeights).length === 0) return {};
     return historicalWeights;
   }, [historicalWeights]);
-
-  // Healthy weight range (BMI 18.5-24.9)
-  const healthyRange = useMemo(() => {
-    return idealWeightHealthyRange(height.cm);
-  }, [height.cm]);
 
   // Prepare share data for ideal weight results
   const shareResult = useMemo(() => {
@@ -169,11 +183,16 @@ export default function IdealWeightCalculator() {
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Basic Information</h3>
             
-            {/* Gender Selection */}
+            {/* Sex Selection */}
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Gender
+                Sex Used by Historical Formulas
               </label>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                The historical Devine, Robinson, Miller and Hamwi equations use
+                male/female-specific constants. The BMI-based adult reference
+                range does not require sex.
+              </p>
               <div className="flex gap-4">
                 {["male", "female"].map((g) => (
                   <label key={g} className="flex items-center">
@@ -244,6 +263,24 @@ export default function IdealWeightCalculator() {
       </motion.div>
 
       {/* Results Section */}
+      {Number.isFinite(age) && age < 20 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.6, delay: 0.4 }}
+          className="mt-8 rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
+        >
+          <div className="text-center">
+            <h3 className="mb-3 text-lg font-semibold">
+              Reference Weight Not Available for Your Age
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              These reference-weight estimates use adult BMI and historical
+              adult formulas and are intended for ages 20 and above.
+            </p>
+          </div>
+        </motion.div>
+      )}
       {referenceWeight && (
         <>
           {/* Primary Result: Healthy Weight Range (BMI 18.5–24.9) */}
@@ -438,7 +475,7 @@ export default function IdealWeightCalculator() {
           }
           specificCaution={
             <>
-              Estimated ideal weight does not account fully for individual
+              Reference-weight estimates do not account fully for individual
               body composition, muscle mass or health status. Do not use this
               result as the sole measure of health or as a reason to pursue
               unnecessary weight changes.

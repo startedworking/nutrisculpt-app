@@ -13,30 +13,24 @@ import { useShareableImage } from "@/hooks/useShareableImage";
 import CalculatorNextStep from "@/components/atoms/CalculatorNextStep";
 import {
   round,
-  kgToLb,
-  lbToKg,
-  BEVERAGE_SHARE,
   waterReferenceFor,
-  weightBasedEstimate,
   waterUnits,
   parseFiniteNumber,
 } from "@/lib/calculators.mjs";
 
 // Activity and climate influence fluid needs, but the reference value is not
-// changed by a fixed amount: sweat losses vary too much for that to be honest.
+// changed by a fixed multiplier: sweat losses vary too much for that to be
+// honest. These are context labels only.
 const ACTIVITY_LEVELS = [
-  { value: 1.0, label: "Sedentary", description: "Little to no exercise", note: "Reference values already cover typical daily activity." },
-  { value: 1.2, label: "Light Activity", description: "Light exercise 1-3 days/week", note: "Exercise raises fluid needs; drink to thirst around activity." },
-  { value: 1.4, label: "Moderate Activity", description: "Moderate exercise 3-5 days/week", note: "Plan fluids around longer or harder sessions." },
-  { value: 1.6, label: "High Activity", description: "Hard exercise 6-7 days/week", note: "Higher sweat losses; monitor thirst and urine colour." },
-  { value: 1.8, label: "Very High Activity", description: "Very hard exercise, physical job", note: "Substantially higher losses; individual assessment may be needed." },
+  { value: "typical", label: "Typical activity", description: "Mostly activities of daily living." },
+  { value: "higher_activity", label: "Higher activity", description: "Regular exercise or a physically demanding job." },
+  { value: "very_high_activity", label: "Very high activity", description: "Hard exercise most days, or a very physical job." },
 ];
 
 const CLIMATE_CONDITIONS = [
-  { value: 1.0, label: "Temperate", description: "Normal temperature & humidity", note: "No additional climate adjustment is applied." },
-  { value: 1.2, label: "Hot Climate", description: "High temperature or humidity", note: "Heat increases sweat losses; increase fluids and monitor thirst." },
-  { value: 1.4, label: "Very Hot/Humid", description: "Extreme heat or humidity", note: "High sweat losses; follow thirst and local heat guidance." },
-  { value: 1.1, label: "Cold Climate", description: "Low temperature", note: "Cold can blunt thirst; drink regularly even without thirst." },
+  { value: "temperate", label: "Temperate", description: "Normal temperature and humidity." },
+  { value: "hot_humid", label: "Hot or humid", description: "High temperature or humidity increases sweat losses." },
+  { value: "cold", label: "Cold", description: "Low temperature; cold can blunt thirst." },
 ];
 
 // Health conditions are shown as cautions, not as automatic fluid adjustments.
@@ -77,33 +71,16 @@ const HEALTH_CONDITIONS = [
 export default function WaterIntakeCalculator() {
   const [unitSystem, setUnitSystem] = useState("metric");
   // No calculation-affecting defaults: inputs start blank/unselected.
-  const [gender, setGender] = useState("male");
+  const [gender, setGender] = useState("");
   const [age, setAge] = useState(null);
-  const [activityLevel, setActivityLevel] = useState(1.0);
-  const [climateCondition, setClimateCondition] = useState(1.0);
+  const [activityContext, setActivityContext] = useState("");
+  const [climateContext, setClimateContext] = useState("");
   const [isPregnant, setIsPregnant] = useState(false);
   const [isBreastfeeding, setIsBreastfeeding] = useState(false);
   const [selectedConditions, setSelectedConditions] = useState([]);
 
   // Share functionality
   const { shareableCardRef, generateImage, generateShareData, validateResultForPrivacy } = useShareableImage('water-intake');
-
-  // Store both metric and imperial values; null = blank / not provided.
-  const [weight, setWeight] = useState({ kg: null, lb: null });
-
-  // Weight handlers — convert only finite values; blank clears the pair.
-  const handleWeightChange = (value, unit) => {
-    const parsed = parseFiniteNumber(value);
-    if (parsed == null) {
-      setWeight({ kg: null, lb: null });
-      return;
-    }
-    if (unit === "kg") {
-      setWeight({ kg: parsed, lb: round(kgToLb(parsed), 1) });
-    } else {
-      setWeight({ kg: round(lbToKg(parsed), 1), lb: parsed });
-    }
-  };
 
   // Handle health condition selection
   const handleConditionChange = (conditionId) => {
@@ -114,44 +91,27 @@ export default function WaterIntakeCalculator() {
     );
   };
 
-  const isAdult = Number.isFinite(age) && age >= 18;
+  const isAdult = Number.isFinite(age) && age >= 19;
+
+  // Pregnancy and lactation are separate life-stage references; there is no
+  // published combined AI for both together.
+  const combinedLifeStage = isPregnant && isBreastfeeding;
 
   // Population reference total water (IOM 2004). This is a reference for a
   // population, not an individual prescription.
   const reference = useMemo(() => {
-    if (!isAdult) return null;
+    if (!isAdult || combinedLifeStage) return null;
     return waterReferenceFor({
       sex: gender,
       pregnant: isPregnant,
       breastfeeding: isBreastfeeding,
     });
-  }, [isAdult, gender, isPregnant, isBreastfeeding]);
-
-  // Separate rough weight-based heuristic (35 ml/kg). Kept deliberately apart
-  // from the reference value because the two methods estimate different things.
-  const weightEstimate = useMemo(() => {
-    if (!isAdult) return null;
-    return weightBasedEstimate(weight.kg);
-  }, [isAdult, weight.kg]);
+  }, [isAdult, gender, isPregnant, isBreastfeeding, combinedLifeStage]);
 
   const referenceUnits = useMemo(
     () => (reference ? waterUnits(reference.total) : null),
     [reference]
   );
-
-  const beverageLiters = reference ? reference.total * BEVERAGE_SHARE : null;
-  const beverageUnits = useMemo(() => waterUnits(beverageLiters), [beverageLiters]);
-
-  const weightUnits = useMemo(() => waterUnits(weightEstimate), [weightEstimate]);
-
-  // Optional example only: spread drinks across a 16-hour waking day.
-  const hourlyExample = useMemo(() => {
-    if (!beverageUnits) return null;
-    return {
-      ml: round(beverageUnits.ml / 16, 0),
-      oz: round(beverageUnits.oz / 16, 1),
-    };
-  }, [beverageUnits]);
 
   const selectedConditionData = useMemo(
     () => HEALTH_CONDITIONS.filter((c) => selectedConditions.includes(c.id)),
@@ -173,11 +133,10 @@ export default function WaterIntakeCalculator() {
         alternativeUnits: `${referenceUnits.ml} ml | ${referenceUnits.oz} fl oz | ${referenceUnits.cups} cups`,
       },
       [
-        "weight",
         "age",
         "gender",
-        "activityLevel",
-        "climateCondition",
+        "activityContext",
+        "climateContext",
         "selectedConditions",
         "isPregnant",
         "isBreastfeeding",
@@ -228,11 +187,14 @@ export default function WaterIntakeCalculator() {
           <div className="space-y-4">
             <h3 className="text-lg font-semibold">Basic Information</h3>
             
-            {/* Gender Selection */}
+            {/* Sex Selection */}
             <div>
               <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Gender
+                Sex Used by Reference
               </label>
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                The published total-water reference values are sex-specific.
+              </p>
               <div className="flex gap-4">
                 {["male", "female"].map((g) => (
                   <label key={g} className="flex items-center">
@@ -259,26 +221,11 @@ export default function WaterIntakeCalculator() {
               onChange={(value) => setAge(parseFiniteNumber(value))}
               type="number"
               placeholder="25"
-              min="1"
+              min="19"
               max="120"
             />
 
-            {/* Weight */}
-            <InputField
-              label={`Weight (${unitSystem === "metric" ? "kg" : "lbs"})`}
-              value={unitSystem === "metric" ? (weight.kg == null ? "" : weight.kg) : (weight.lb == null ? "" : weight.lb)}
-              onChange={(value) =>
-                handleWeightChange(
-                  value,
-                  unitSystem === "metric" ? "kg" : "lb"
-                )
-              }
-              type="number"
-              placeholder={unitSystem === "metric" ? "70" : "154"}
-              min="1"
-            />
-
-            {/* Special Conditions for Women */}
+            {/* Life-stage conditions (female only) */}
             {gender === "female" && (
               <div className="space-y-3">
                 <label className="flex items-center">
@@ -299,55 +246,65 @@ export default function WaterIntakeCalculator() {
                   />
                   <span className="text-sm font-medium">Breastfeeding</span>
                 </label>
+                {combinedLifeStage && (
+                  <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+                    The reference table provides separate pregnancy and
+                    lactation values and does not provide a combined value for
+                    this selection.
+                  </p>
+                )}
               </div>
             )}
           </div>
 
-          {/* Activity & Environment */}
-          <div className="space-y-4">
-            <h3 className="text-lg font-semibold">Activity & Environment</h3>
-            
-            {/* Activity Level */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Activity Level
-              </label>
-              <select
-                value={activityLevel}
-                onChange={(e) => setActivityLevel(parseFloat(e.target.value))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              >
-                {ACTIVITY_LEVELS.map((level) => (
-                  <option key={level.value} value={level.value}>
-                    {level.label} - {level.description}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* Activity & Environment */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold">Activity & Environment</h3>
 
-            {/* Climate Condition */}
-            <div>
-              <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-                Climate Condition
-              </label>
-              <select
-                value={climateCondition}
-                onChange={(e) => setClimateCondition(parseFloat(e.target.value))}
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-              >
-                {CLIMATE_CONDITIONS.map((climate) => (
-                  <option key={climate.value} value={climate.value}>
-                    {climate.label} - {climate.description}
-                  </option>
-                ))}
-              </select>
-            </div>
+              {/* Activity Context */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Activity Context
+                </label>
+                <select
+                  value={activityContext}
+                  onChange={(e) => setActivityContext(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">Select activity context</option>
+                  {ACTIVITY_LEVELS.map((level) => (
+                    <option key={level.value} value={level.value}>
+                      {level.label} — {level.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            <p className="text-xs text-gray-500 dark:text-gray-400">
-              Activity and climate change your needs but are not used to alter the reference
-              value, because sweat losses vary too much for a fixed adjustment.
-            </p>
-          </div>
+              {/* Climate Context */}
+              <div>
+                <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Climate Context
+                </label>
+                <select
+                  value={climateContext}
+                  onChange={(e) => setClimateContext(e.target.value)}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                >
+                  <option value="">Select climate context</option>
+                  {CLIMATE_CONDITIONS.map((climate) => (
+                    <option key={climate.value} value={climate.value}>
+                      {climate.label} — {climate.description}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Activity and climate change your needs but are not used to alter
+                the reference value, because sweat losses vary too much for a
+                fixed adjustment.
+              </p>
+            </div>
         </div>
 
         {/* Health Conditions */}
@@ -457,80 +414,6 @@ export default function WaterIntakeCalculator() {
                 </p>
               </div>
             </motion.div>
-
-            {/* Weight-based heuristic */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.5 }}
-              className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
-            >
-              <div className="text-center">
-                <h3 className="mb-4 text-lg font-semibold">Weight-Based Estimate</h3>
-                <p className="text-4xl font-extrabold tracking-tight text-cyan-600 dark:text-cyan-400">
-                  {weightUnits ? `${weightUnits.liters}L` : "—"}
-                </p>
-                {weightUnits && (
-                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                    {weightUnits.ml} ml · {weightUnits.oz} fl oz · {weightUnits.cups} cups
-                  </p>
-                )}
-                <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                  Rough heuristic of about 35 ml per kg of body weight. A starting reference, not a
-                  requirement.
-                </p>
-              </div>
-            </motion.div>
-
-            {/* Optional hourly example */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.6 }}
-              className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
-            >
-              <div className="text-center">
-                <h3 className="mb-4 text-lg font-semibold">Optional Hourly Example</h3>
-                <p className="text-4xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400">
-                  {hourlyExample ? hourlyExample.ml : "—"}
-                </p>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">ml per waking hour</p>
-                {hourlyExample && (
-                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {hourlyExample.oz} fl oz per hour
-                  </p>
-                )}
-                <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                  Example only. Fluid needs are not tied to a fixed hourly schedule; drink to thirst.
-                </p>
-              </div>
-            </motion.div>
-
-            {/* Bottles */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.6, delay: 0.7 }}
-              className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
-            >
-              <div className="text-center">
-                <h3 className="mb-4 text-lg font-semibold">Bottles (Example)</h3>
-                <div className="space-y-3">
-                  <div>
-                    <p className="text-2xl font-bold text-purple-600 dark:text-purple-400">
-                      {beverageUnits ? round(beverageUnits.liters / 0.5, 1) : "—"}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">500 ml bottles</p>
-                  </div>
-                  <div>
-                    <p className="text-2xl font-bold text-orange-600 dark:text-orange-400">
-                      {beverageUnits ? round(beverageUnits.oz / 16.9, 1) : "—"}
-                    </p>
-                    <p className="text-xs text-gray-500 dark:text-gray-400">16.9 fl oz bottles</p>
-                  </div>
-                </div>
-              </div>
-            </motion.div>
             </div>
           )}
         </>
@@ -542,11 +425,8 @@ export default function WaterIntakeCalculator() {
           whatItMeans={
             <>
               The <span className="font-semibold">reference total water</span> is{" "}
-              {referenceUnits ? referenceUnits.liters : "—"} L/day ({referenceUnits ? referenceUnits.ml : "—"} ml) from all beverages and food,
-              an adult population reference. About {beverageUnits ? beverageUnits.liters : "—"} L/day comes from drinks.
-              A separate rough weight-based estimate is{" "}
-              {weightUnits ? `${weightUnits.liters} L/day` : "not available"}. These are different
-              reference systems and should not be added together.
+              {referenceUnits ? referenceUnits.liters : "—"} L/day ({referenceUnits ? referenceUnits.ml : "—"} ml), from all beverages and food,
+              an adult population reference. It is not a plain-water drinking target.
             </>
           }
           whyItMatters={
@@ -581,37 +461,6 @@ export default function WaterIntakeCalculator() {
         </p>
       </div>
 
-      {/* Hydration Schedule */}
-      {isAdult && !hasMedicalRestriction && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.7 }}
-          className="mt-8 rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
-        >
-          <h3 className="mb-2 text-center text-lg font-semibold">
-            Optional Hydration Schedule Example
-          </h3>
-          <p className="mb-6 text-center text-xs text-gray-500 dark:text-gray-400">
-            An example of spreading drinks across the day. It is not a physiological requirement.
-          </p>
-          <div className="grid gap-3 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-4">
-            {[
-              { time: "Wake Up", amount: round(beverageUnits.ml * 0.15), description: "Start your day" },
-              { time: "Morning", amount: round(beverageUnits.ml * 0.25), description: "Pre-lunch" },
-              { time: "Afternoon", amount: round(beverageUnits.ml * 0.35), description: "Peak hours" },
-              { time: "Evening", amount: round(beverageUnits.ml * 0.25), description: "Before dinner" },
-            ].map(({ time, amount, description }) => (
-              <div key={time} className="rounded-lg bg-blue-50 p-4 text-center dark:bg-blue-950/40">
-                <h4 className="font-semibold text-blue-900 dark:text-blue-200">{time}</h4>
-                <p className="text-xl font-bold text-blue-600 dark:text-blue-400">{amount}ml</p>
-                <p className="text-xs text-blue-700 dark:text-blue-300">{description}</p>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      )}
-
       {/* Tips Section */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -629,8 +478,8 @@ export default function WaterIntakeCalculator() {
             </h4>
             <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
               <li>• Sip throughout the day</li>
-              <li>• Don&apos;t wait until you&apos;re thirsty</li>
-              <li>• Set hourly reminders</li>
+              <li>• Drink according to thirst</li>
+              <li>• Replace fluids lost through sweat</li>
             </ul>
           </div>
           <div className="space-y-2">
@@ -648,8 +497,8 @@ export default function WaterIntakeCalculator() {
               Monitor Signs:
             </h4>
             <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-              <li>• Urine should be pale yellow</li>
-              <li>• Check for thirst and fatigue</li>
+              <li>• Urine colour can be a rough cue, not a diagnostic measure</li>
+              <li>• Diet, supplements and medications affect urine colour</li>
               <li>• Adjust for activity and weather</li>
             </ul>
           </div>

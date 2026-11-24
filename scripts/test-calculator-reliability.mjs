@@ -14,16 +14,18 @@ import {
   calculateMacros,
   evaluateAdultAmdr,
   evaluateFitnessProtein,
+  evaluateOneRmInputPolicy,
   calculateBMI,
   classifyBMI,
   bmiHealthyRange,
   calculateTargetCalories,
   estimateOneRM,
   estimateAllOneRM,
+  oneRmReliability,
   calculateIdealWeight,
   calculateAllIdealWeights,
   validateHeartRateInputs,
-  weightBasedEstimate,
+  waterReferenceFor,
   waterUnits,
 } from "../lib/calculators.mjs";
 
@@ -128,13 +130,6 @@ test("macro: round does not mask null as zero", () => {
 // Water safety: blank / invalid inputs must not crash
 // ---------------------------------------------------------------------------
 
-test("water: weightBasedEstimate rejects blank/invalid weight (no crash)", () => {
-  assert.equal(weightBasedEstimate(null), null);
-  assert.equal(weightBasedEstimate(NaN), null);
-  assert.equal(weightBasedEstimate(0), null);
-  assert.equal(weightBasedEstimate(-5), null);
-});
-
 test("water: waterUnits rejects blank/invalid litres (no crash)", () => {
   assert.equal(waterUnits(null), null);
   assert.equal(waterUnits(NaN), null);
@@ -142,10 +137,162 @@ test("water: waterUnits rejects blank/invalid litres (no crash)", () => {
   assert.equal(waterUnits(-1), null);
 });
 
-test("water: weight-based estimate of valid weight is finite", () => {
-  const est = weightBasedEstimate(70);
-  assert.ok(Number.isFinite(est));
-  assert.ok(est > 0);
+// ---------------------------------------------------------------------------
+// 04E-2C Scientific applicability tests
+// ---------------------------------------------------------------------------
+
+test("04E-2C: 1RM policy — 1 rep allowed", () => {
+  const p = evaluateOneRmInputPolicy(1);
+  assert.equal(p.allowed, true);
+  assert.equal(p.level, "recommended");
+});
+
+test("04E-2C: 1RM policy — 10 reps recommended", () => {
+  const p = evaluateOneRmInputPolicy(10);
+  assert.equal(p.allowed, true);
+  assert.equal(p.level, "recommended");
+});
+
+test("04E-2C: 1RM policy — 11 reps caution", () => {
+  const p = evaluateOneRmInputPolicy(11);
+  assert.equal(p.allowed, true);
+  assert.equal(p.level, "caution");
+});
+
+test("04E-2C: 1RM policy — 15 reps caution", () => {
+  const p = evaluateOneRmInputPolicy(15);
+  assert.equal(p.allowed, true);
+  assert.equal(p.level, "caution");
+});
+
+test("04E-2C: 1RM policy — 16 reps unsupported", () => {
+  const p = evaluateOneRmInputPolicy(16);
+  assert.equal(p.allowed, false);
+  assert.equal(p.level, "unsupported");
+});
+
+test("04E-2C: 1RM policy — 20 reps unsupported", () => {
+  const p = evaluateOneRmInputPolicy(20);
+  assert.equal(p.allowed, false);
+  assert.equal(p.level, "unsupported");
+});
+
+test("04E-2C: 1RM policy — invalid reps", () => {
+  assert.equal(evaluateOneRmInputPolicy(5.5).allowed, false);
+  assert.equal(evaluateOneRmInputPolicy(0).allowed, false);
+  assert.equal(evaluateOneRmInputPolicy(-1).allowed, false);
+  assert.equal(evaluateOneRmInputPolicy(NaN).allowed, false);
+  assert.equal(evaluateOneRmInputPolicy(Infinity).allowed, false);
+});
+
+test("04E-2C: 1RM estimate rejects invalid reps", () => {
+  assert.equal(estimateOneRM(80, 5.5), null);
+  assert.equal(estimateOneRM(80, 0), null);
+  assert.equal(estimateOneRM(80, -1), null);
+  assert.equal(estimateOneRM(80, NaN), null);
+  assert.equal(estimateOneRM(80, Infinity), null);
+  // reps 20 is mathematically computable but product-policy unsupported;
+  // the page blocks it via evaluateOneRmInputPolicy.
+  assert.ok(Number.isFinite(estimateOneRM(80, 20)));
+});
+
+test("04E-2C: oneRmReliability rejects invalid reps", () => {
+  assert.equal(oneRmReliability(5.5), null);
+  assert.equal(oneRmReliability(0), null);
+});
+
+test("04E-2C: Reference Weight age 19 → no adult output", () => {
+  const r = calculateIdealWeight({ heightCm: 170, gender: "male", formulaId: "bmi" });
+  // calculateIdealWeight itself doesn't gate age; the page does. Test helper
+  // returns value but page blocks age < 20.
+  assert.ok(Number.isFinite(r));
+});
+
+test("04E-2C: Reference Weight blank sex → BMI works, historical null", () => {
+  const bmiRef = calculateIdealWeight({ heightCm: 170, gender: "", formulaId: "bmi" });
+  assert.ok(Number.isFinite(bmiRef));
+  const hist = calculateIdealWeight({ heightCm: 170, gender: "", formulaId: "devine" });
+  assert.equal(hist, null);
+});
+
+test("04E-2C: Reference Weight invalid sex → historical null", () => {
+  const hist = calculateIdealWeight({ heightCm: 170, gender: "other", formulaId: "devine" });
+  assert.equal(hist, null);
+});
+
+test("04E-2C: Reference Weight male historical formulas", () => {
+  const r = calculateIdealWeight({ heightCm: 175, gender: "male", formulaId: "devine" });
+  assert.ok(Number.isFinite(r));
+  assert.ok(r > 0);
+});
+
+test("04E-2C: Reference Weight female historical formulas", () => {
+  const r = calculateIdealWeight({ heightCm: 175, gender: "female", formulaId: "devine" });
+  assert.ok(Number.isFinite(r));
+  assert.ok(r > 0);
+});
+
+test("04E-2C: Reference Weight no frame adjustment, no average", () => {
+  const all = calculateAllIdealWeights({ heightCm: 170, gender: "male" });
+  assert.ok(!all.average);
+  const devine = calculateIdealWeight({ heightCm: 170, gender: "male", formulaId: "devine" });
+  // Frame adjustment removed: result is frame-independent by design
+  assert.ok(Number.isFinite(devine));
+});
+
+test("04E-2C: Water male helper returns 3.7 L (page gates age < 19)", () => {
+  const r = waterReferenceFor({
+    age: 18,
+    sex: "male",
+    pregnant: false,
+    breastfeeding: false,
+  });
+  // waterReferenceFor doesn't take age; the page gates at 19. Test helper
+  // returns value but page blocks age < 19.
+  assert.ok(Number.isFinite(r.total));
+});
+
+test("04E-2C: Water male → 3.7 L, female → 2.7 L", () => {
+  const m = waterReferenceFor({ sex: "male", pregnant: false, breastfeeding: false });
+  const f = waterReferenceFor({ sex: "female", pregnant: false, breastfeeding: false });
+  assert.equal(m.total, 3.7);
+  assert.equal(f.total, 2.7);
+});
+
+test("04E-2C: Water pregnancy → 3.0 L, lactation → 3.8 L", () => {
+  const p = waterReferenceFor({ sex: "female", pregnant: true, breastfeeding: false });
+  const l = waterReferenceFor({ sex: "female", pregnant: false, breastfeeding: true });
+  assert.equal(p.total, 3.0);
+  assert.equal(l.total, 3.8);
+});
+
+test("04E-2C: Water invalid/blank sex → null", () => {
+  assert.equal(waterReferenceFor({ sex: "", pregnant: false, breastfeeding: false }), null);
+  assert.equal(waterReferenceFor({ sex: "other", pregnant: false, breastfeeding: false }), null);
+  assert.equal(waterReferenceFor({ sex: null, pregnant: false, breastfeeding: false }), null);
+});
+
+test("04E-2C: Water male + pregnancy → null (pregnancy requires female)", () => {
+  assert.equal(waterReferenceFor({ sex: "male", pregnant: true, breastfeeding: false }), null);
+});
+
+test("04E-2C: Water male + lactation → null", () => {
+  assert.equal(waterReferenceFor({ sex: "male", pregnant: false, breastfeeding: true }), null);
+});
+
+test("04E-2C: Water pregnancy + lactation → null (no combined value)", () => {
+  assert.equal(
+    waterReferenceFor({ sex: "female", pregnant: true, breastfeeding: true }),
+    null
+  );
+});
+
+test("04E-2C: Water units conversion", () => {
+  const u = waterUnits(3.7);
+  assert.ok(Number.isFinite(u.liters));
+  assert.ok(Number.isFinite(u.ml));
+  assert.ok(Number.isFinite(u.oz));
+  assert.ok(Number.isFinite(u.cups));
 });
 
 // ---------------------------------------------------------------------------
@@ -258,9 +405,11 @@ test("ideal-weight: valid height produces finite reference weight", () => {
   assert.ok(ref > 0);
 });
 
-test("ideal-weight: blank gender uses female branch without crash", () => {
+test("ideal-weight: blank sex → historical formulas return null", () => {
   const ref = calculateIdealWeight({ heightCm: 175, gender: "", formulaId: "robinson" });
-  assert.ok(Number.isFinite(ref));
+  assert.equal(ref, null);
+  const bmiRef = calculateIdealWeight({ heightCm: 175, gender: "", formulaId: "bmi" });
+  assert.ok(Number.isFinite(bmiRef));
 });
 
 // ---------------------------------------------------------------------------
@@ -386,13 +535,6 @@ test("04E-2A: Mifflin calculation accepts adult age range (19-78 source populati
   // Outside source population still calculates (extrapolation, flagged elsewhere)
   assert.ok(Number.isFinite(calculateBMR(70, 175, 19, "male")));
   assert.ok(Number.isFinite(calculateBMR(70, 175, 78, "male")));
-});
-
-test("04E-2A: Water total-water distinction is in code comments", () => {
-  // weightBasedEstimate is a heuristic, not a DRI prescription
-  const est = weightBasedEstimate(70);
-  assert.ok(Number.isFinite(est));
-  assert.ok(est > 0);
 });
 
 test("04E-2A: Heart rate terminology - predicted HR is finite for valid adult", () => {

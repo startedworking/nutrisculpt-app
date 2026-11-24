@@ -6,7 +6,6 @@ import {
   kgToLb,
   lbToKg,
   waterReferenceFor,
-  weightBasedEstimate,
   waterUnits,
   predictMaxHR,
   computeHrZones,
@@ -67,12 +66,6 @@ test("pregnancy and lactation use separate population references", () => {
     waterReferenceFor({ sex: "female", breastfeeding: true }).total,
     3.8
   );
-});
-
-test("weight-based estimate is 35 ml per kg", () => {
-  assert.equal(weightBasedEstimate(70), 2.45);
-  assert.equal(weightBasedEstimate(0), null);
-  assert.equal(weightBasedEstimate(null), null);
 });
 
 test("water units are derived from one unrounded litre value", () => {
@@ -192,9 +185,9 @@ test("all equations are produced for valid input", () => {
 });
 
 test("reliability tiers change with repetitions", () => {
-  assert.equal(oneRmReliability(5).level, "good");
-  assert.equal(oneRmReliability(12).level, "reduced");
-  assert.equal(oneRmReliability(18).level, "low");
+  assert.equal(oneRmReliability(5).level, "recommended");
+  assert.equal(oneRmReliability(12).level, "caution");
+  assert.equal(oneRmReliability(18).level, "unsupported");
 });
 
 // ---------------------------------------------------------------------------
