@@ -25,9 +25,19 @@ import {
   calculateIdealWeight,
   calculateAllIdealWeights,
   validateHeartRateInputs,
+  predictMaxHR,
+  calculatePercentMaxRanges,
+  calculateHrrRanges,
+  MAX_HR_METHODS,
+  methodById,
   waterReferenceFor,
   waterUnits,
 } from "../lib/calculators.mjs";
+import {
+  validateTransformationSessionPayload,
+  SESSION_VERSION,
+  TRANSFORMATION_SESSION_KEY,
+} from "../lib/transformation-session.mjs";
 
 // ---------------------------------------------------------------------------
 // Shared finite-number parser (04D-1)
@@ -430,17 +440,18 @@ test("heart-rate: validateHeartRateInputs rejects blank age (no crash)", () => {
   assert.equal(v.predicted, null);
 });
 
-test("heart-rate: validateHeartRateInputs rejects blank restingHR (no crash)", () => {
+test("heart-rate: validateHeartRateInputs blank restingHR is valid (%HRmax only)", () => {
   const v = validateHeartRateInputs({
     age: 30,
     restingHR: null,
-    maxHR: 195,
+    maxHR: null,
     useCustomMaxHR: false,
     methodId: "standard",
     sex: "male",
   });
-  assert.ok(v.errors.restingHR);
-  assert.equal(v.valid, false);
+  assert.equal(v.valid, true);
+  assert.equal(v.predicted, 190);
+  assert.equal(Object.keys(v.errors).length, 0);
 });
 
 test("heart-rate: validateHeartRateInputs rejects invalid inputs (no crash)", () => {
@@ -777,4 +788,191 @@ test("04E-2B: ADULT_PAL_CATEGORIES has four categories", () => {
   assert.ok(ids.includes("low_active"));
   assert.ok(ids.includes("active"));
   assert.ok(ids.includes("very_active"));
+});
+
+// ---------------------------------------------------------------------------
+// 04E-2D Heart rate methodology tests
+// ---------------------------------------------------------------------------
+
+test("04E-2D: Tanaka default method is the first listed", () => {
+  assert.equal(MAX_HR_METHODS[0].id, "tanaka");
+  assert.equal(MAX_HR_METHODS[0].requiresSex, false);
+});
+
+test("04E-2D: Tanaka age 40 → 180 bpm", () => {
+  assert.equal(predictMaxHR({ methodId: "tanaka", age: 40, sex: "" }), 180);
+});
+
+test("04E-2D: 220−age age 40 → 180 bpm", () => {
+  assert.equal(predictMaxHR({ methodId: "standard", age: 40, sex: "" }), 180);
+});
+
+test("04E-2D: Gulati age 40 female → 171 bpm", () => {
+  assert.equal(predictMaxHR({ methodId: "gulati", age: 40, sex: "female" }), 171);
+});
+
+test("04E-2D: Gulati rejected for male or blank sex", () => {
+  assert.equal(predictMaxHR({ methodId: "gulati", age: 40, sex: "male" }), null);
+  assert.equal(predictMaxHR({ methodId: "gulati", age: 40, sex: "" }), null);
+});
+
+test("04E-2D: Tanaka and 220−age valid without sex", () => {
+  assert.equal(predictMaxHR({ methodId: "tanaka", age: 40, sex: "" }), 180);
+  assert.equal(predictMaxHR({ methodId: "standard", age: 40, sex: "" }), 180);
+});
+
+test("04E-2D: predicted max HR rejected below age 18", () => {
+  assert.equal(predictMaxHR({ methodId: "tanaka", age: 17, sex: "" }), null);
+  assert.equal(predictMaxHR({ methodId: "standard", age: 17, sex: "" }), null);
+});
+
+test("04E-2D: custom max HR works with blank age", () => {
+  const v = validateHeartRateInputs({
+    age: null,
+    restingHR: null,
+    maxHR: 180,
+    useCustomMaxHR: true,
+    methodId: "tanaka",
+    sex: "",
+  });
+  assert.equal(v.valid, true);
+  assert.equal(v.predicted, 180);
+});
+
+test("04E-2D: %HRmax ranges maxHR 180 → moderate 117-135, vigorous 137-173", () => {
+  const r = calculatePercentMaxRanges(180);
+  assert.deepEqual(r.moderate, { min: 117, max: 135 });
+  assert.deepEqual(r.vigorous, { min: 137, max: 173 });
+});
+
+test("04E-2D: HRR maxHR 180 resting 60 → moderate 108-131, vigorous 132-167", () => {
+  const r = calculateHrrRanges(180, 60);
+  assert.deepEqual(r.moderate, { min: 108, max: 131 });
+  assert.deepEqual(r.vigorous, { min: 132, max: 167 });
+});
+
+test("04E-2D: resting HR blank → %HRmax available, HRR unavailable", () => {
+  const v = validateHeartRateInputs({
+    age: 40,
+    restingHR: null,
+    maxHR: null,
+    useCustomMaxHR: false,
+    methodId: "tanaka",
+    sex: "",
+  });
+  assert.equal(v.valid, true);
+  assert.equal(v.predicted, 180);
+  assert.equal(calculateHrrRanges(180, null), null);
+});
+
+test("04E-2D: restingHR >= maxHR → HRR invalid, %HRmax still available", () => {
+  const r = calculateHrrRanges(100, 100);
+  assert.equal(r, null);
+  const v = validateHeartRateInputs({
+    age: 40,
+    restingHR: 100,
+    maxHR: null,
+    useCustomMaxHR: false,
+    methodId: "tanaka",
+    sex: "",
+  });
+  assert.equal(v.valid, true);
+  assert.equal(v.predicted, 180);
+});
+
+// ---------------------------------------------------------------------------
+// 04E-2D Transformation synchronization tests
+// ---------------------------------------------------------------------------
+
+test("04E-2D: Transformation EER matches shared calculator — female 22, 165 cm, 63 kg, low active ≈ 2275", () => {
+  const eer = calculateAdultEER({
+    age: 22,
+    sex: "female",
+    weightKg: 63,
+    heightCm: 165,
+    palCategory: "low_active",
+  });
+  assert.ok(Math.abs(eer - 2275.37) < 0.01);
+});
+
+test("04E-2D: Transformation water male adult → 3.7 L, female → 2.7 L", () => {
+  const m = waterReferenceFor({ sex: "male", pregnant: false, breastfeeding: false });
+  const f = waterReferenceFor({ sex: "female", pregnant: false, breastfeeding: false });
+  assert.equal(m.total, 3.7);
+  assert.equal(f.total, 2.7);
+});
+
+test("04E-2D: Transformation water reference does not depend on weight", () => {
+  const m1 = waterReferenceFor({ sex: "male", pregnant: false, breastfeeding: false });
+  const m2 = waterReferenceFor({ sex: "male", pregnant: false, breastfeeding: false });
+  assert.equal(m1.total, m2.total);
+  assert.equal(m1.total, 3.7);
+});
+
+test("04E-2D: Transformation HR age 40 Tanaka → 180 bpm", () => {
+  assert.equal(predictMaxHR({ methodId: "tanaka", age: 40, sex: "male" }), 180);
+});
+
+test("04E-2D: Transformation session v2 validates adult PAL categories", () => {
+  for (const pal of ["inactive", "low_active", "active", "very_active"]) {
+    const p = validateTransformationSessionPayload({
+      version: SESSION_VERSION,
+      savedAt: new Date().toISOString(),
+      unitSystem: "metric",
+      inputs: {
+        age: "30",
+        gender: "female",
+        activity: pal,
+        primaryGoal: "health",
+        weightKg: 63,
+        heightCm: 165,
+        waistCm: 80,
+      },
+      completed: true,
+    });
+    assert.ok(p, `expected ${pal} to be valid`);
+  }
+});
+
+test("04E-2D: Transformation session rejects legacy activity values", () => {
+  for (const pal of ["sedentary", "light", "moderate", "veryActive", ""]) {
+    const p = validateTransformationSessionPayload({
+      version: SESSION_VERSION,
+      savedAt: new Date().toISOString(),
+      unitSystem: "metric",
+      inputs: {
+        age: "30",
+        gender: "female",
+        activity: pal,
+        primaryGoal: "health",
+        weightKg: 63,
+        heightCm: 165,
+      },
+      completed: true,
+    });
+    assert.equal(p, null, `expected ${pal} to be rejected`);
+  }
+});
+
+test("04E-2D: Transformation session rejects wrong schema version (v1)", () => {
+  const p = validateTransformationSessionPayload({
+    version: 1,
+    savedAt: new Date().toISOString(),
+    unitSystem: "metric",
+    inputs: {
+      age: "30",
+      gender: "female",
+      activity: "low_active",
+      primaryGoal: "health",
+      weightKg: 63,
+      heightCm: 165,
+    },
+    completed: true,
+  });
+  assert.equal(p, null);
+});
+
+test("04E-2D: Transformation session key is v2", () => {
+  assert.equal(TRANSFORMATION_SESSION_KEY, "nutrisculpt:transformation:v2");
+  assert.equal(SESSION_VERSION, 2);
 });

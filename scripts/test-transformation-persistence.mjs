@@ -23,7 +23,7 @@ const approx = (actual, expected, tolerance = TOL) => {
 const baseForm = {
   age: "35",
   gender: "female",
-  activity: "moderate",
+  activity: "active",
   primaryGoal: "health",
   aerobicActivity: "150_299",
   aerobicIntensity: "moderate",

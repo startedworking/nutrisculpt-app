@@ -119,8 +119,8 @@ test("HR validation rejects impossible reserves", () => {
     sex: "male",
   });
   assert.equal(result.valid, false);
-  assert.ok(result.errors.restingHR);
   assert.ok(result.errors.reserve);
+  assert.equal(result.errors.restingHR, undefined);
 });
 
 test("HR validation rejects missing or out-of-range values", () => {
@@ -152,7 +152,7 @@ test("HR validation rejects missing or out-of-range values", () => {
     methodId: "gulati",
     sex: "male",
   });
-  assert.ok(badMethod.errors.method);
+  assert.ok(badMethod.errors.sex);
 });
 
 // ---------------------------------------------------------------------------

@@ -18,12 +18,20 @@ import {
   inToCm,
   cmToFeetInches,
   feetInchesToCm,
+  calculateAdultEER,
+  ADULT_PAL_CATEGORIES,
+  ADULT_PAL_DESCRIPTION_NOTE,
+  calculateMacros,
+  waterReferenceFor,
+  predictMaxHR,
+  calculatePercentMaxRanges,
 } from "@/lib/calculators";
 import {
   createTransformationSessionPayload,
   readTransformationSession,
   saveTransformationSession,
   clearTransformationSession,
+  clearLegacyTransformationSession,
 } from "@/lib/transformation-session";
 import ResultExplanation from "@/components/atoms/ResultExplanation";
 import HealthDisclaimer from "@/components/atoms/HealthDisclaimer";
@@ -45,7 +53,7 @@ function TransformationForm() {
   const [form, setForm] = useState({
     gender: "",
     age: "",
-    activity: "",
+    palCategory: "",
     primaryGoal: "",
     aerobicActivity: "",
     aerobicIntensity: "",
@@ -75,7 +83,10 @@ function TransformationForm() {
   // The current comprehensive snapshot uses adult reference methods and is
   // designed for ages 20 and above. A restored session with age below 20 must
   // not display an adult snapshot: clear it and return to the input state.
+  // Legacy v1 payloads (pre-EER activity model) are never reinterpreted; they
+  // are cleared on init/reset.
   useEffect(() => {
+    clearLegacyTransformationSession();
     const stored = readTransformationSession();
     if (!stored) return;
     const { unitSystem, inputs } = stored;
@@ -94,7 +105,7 @@ function TransformationForm() {
       ...f,
       age: inputs.age,
       gender: inputs.gender,
-      activity: inputs.activity,
+      palCategory: inputs.activity,
       primaryGoal: inputs.primaryGoal,
       aerobicActivity: inputs.aerobicActivity,
       aerobicIntensity: inputs.aerobicIntensity,
@@ -225,8 +236,9 @@ function TransformationForm() {
     const newErrors = {};
 
     const ageVal = parseFloat(form.age);
-    if (!form.age || !Number.isFinite(ageVal) || ageVal < 1) {
-      newErrors.age = "Please enter your age";
+    if (!form.age || !Number.isFinite(ageVal) || ageVal < 20) {
+      newErrors.age =
+        "The current comprehensive snapshot uses adult reference methods and is designed for ages 20 and above.";
     }
 
     if (!form.gender) {
@@ -289,6 +301,10 @@ function TransformationForm() {
       }
     }
 
+    if (!ADULT_PAL_CATEGORIES.includes(form.palCategory)) {
+      newErrors.palCategory = "Please select your physical activity category.";
+    }
+
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
@@ -296,15 +312,6 @@ function TransformationForm() {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (validateForm()) {
-      const ageNum = parseFloat(form.age);
-      if (!Number.isFinite(ageNum) || ageNum < 20) {
-        setErrors((e) => ({
-          ...e,
-          age:
-            "The current comprehensive snapshot uses adult reference methods and is designed for ages 20 and above. Please enter an age of 20 or older.",
-        }));
-        return;
-      }
       const suggestedCategory = GOAL_TO_SERVICE_MAP[form.primaryGoal] || "not-sure";
       setSelectedServiceCategory(suggestedCategory);
       const payload = createTransformationSessionPayload({
@@ -319,6 +326,7 @@ function TransformationForm() {
 
   const resetForm = () => {
     clearTransformationSession();
+    clearLegacyTransformationSession();
     setSubmitted(false);
     setErrors({});
     setSelectedServiceCategory("");
@@ -328,14 +336,8 @@ function TransformationForm() {
     setUnitSystem("metric");
   };
 
-  // Activity level options
-  const ACTIVITY_LEVELS = [
-    { value: "sedentary", label: "Sedentary", description: "Mostly seated, minimal everyday movement" },
-    { value: "light", label: "Lightly active", description: "Some daily movement and light activity" },
-    { value: "moderate", label: "Moderately active", description: "Regular movement and exercise" },
-    { value: "active", label: "Very active", description: "Substantial daily movement or frequent training" },
-    { value: "veryActive", label: "Extremely active", description: "Exceptionally high daily physical activity" },
-  ];
+  // Physical Activity Level (PAL) categories — shared 2023 DRI adult model.
+  const PAL_LEVELS = ADULT_PAL_CATEGORIES;
 
   const GOAL_OPTIONS = [
     { value: "strength", label: "Build strength and general fitness" },
@@ -391,80 +393,53 @@ function TransformationForm() {
   const idealWeightMin = h > 0 ? 18.5 * h * h : 0;
   const idealWeightMax = h > 0 ? 24.9 * h * h : 0;
   const hasGender = form.gender === "male" || form.gender === "female";
-  const hasActivity = !!form.activity;
-  const rmr = hasGender && ageNum && heightCm && weightKg
-    ? form.gender === "male"
-      ? 10 * weightKg + 6.25 * heightCm - 5 * ageNum + 5
-      : 10 * weightKg + 6.25 * heightCm - 5 * ageNum - 161
-    : 0;
-  const activityFactor = hasActivity
-    ? {
-        sedentary: 1.2,
-        light: 1.375,
-        moderate: 1.55,
-        active: 1.725,
-        veryActive: 1.9,
-      }[form.activity]
-    : 0;
-  const maintenanceCalories = rmr > 0 && activityFactor > 0 ? Math.round(rmr * activityFactor) : 0;
+  const hasValidPal = ADULT_PAL_CATEGORIES.includes(form.palCategory);
+
+  // Maintenance energy via the shared 2023 DRI adult Estimated Energy
+  // Requirement (EER). Transformation requires age >= 20, so adult EER applies.
+  const eer = hasGender && ageNum && heightCm && weightKg && hasValidPal
+    ? calculateAdultEER({
+        age: ageNum,
+        sex: form.gender,
+        weightKg,
+        heightCm,
+        palCategory: form.palCategory,
+      })
+    : null;
+  const maintenanceCalories = eer ? Math.round(eer) : 0;
   const protein = maintenanceCalories > 0 ? Math.round((maintenanceCalories * 0.25) / 4) : 0;
   const carbs = maintenanceCalories > 0 ? Math.round((maintenanceCalories * 0.45) / 4) : 0;
   const fat = maintenanceCalories > 0 ? Math.round((maintenanceCalories * 0.3) / 9) : 0;
-  const estimatedMaxHR = ageNum ? 220 - ageNum : 0;
-  const waterReference = weightKg ? weightKg * 0.033 : 0;
-  const hrZones = [
-    {
-      name: "Very Light",
-      intensity: "Recovery / Warm-up",
-      minPct: 50,
-      maxPct: 60,
-      min: estimatedMaxHR > 0 ? Math.round(estimatedMaxHR * 0.5) : 0,
-      max: estimatedMaxHR > 0 ? Math.round(estimatedMaxHR * 0.6) : 0,
-    },
-    {
-      name: "Light",
-      intensity: "Aerobic Base",
-      minPct: 60,
-      maxPct: 70,
-      min: estimatedMaxHR > 0 ? Math.round(estimatedMaxHR * 0.6) : 0,
-      max: estimatedMaxHR > 0 ? Math.round(estimatedMaxHR * 0.7) : 0,
-    },
-    {
-      name: "Moderate",
-      intensity: "Aerobic Fitness",
-      minPct: 70,
-      maxPct: 80,
-      min: estimatedMaxHR > 0 ? Math.round(estimatedMaxHR * 0.7) : 0,
-      max: estimatedMaxHR > 0 ? Math.round(estimatedMaxHR * 0.8) : 0,
-    },
-    {
-      name: "Vigorous",
-      intensity: "Lactate Threshold",
-      minPct: 80,
-      maxPct: 90,
-      min: estimatedMaxHR > 0 ? Math.round(estimatedMaxHR * 0.8) : 0,
-      max: estimatedMaxHR > 0 ? Math.round(estimatedMaxHR * 0.9) : 0,
-    },
-    {
-      name: "Very Vigorous",
-      intensity: "VO₂ Max Effort",
-      minPct: 90,
-      maxPct: 100,
-      min: estimatedMaxHR > 0 ? Math.round(estimatedMaxHR * 0.9) : 0,
-      max: estimatedMaxHR,
-    },
-  ];
+
+  const predictedMaxHR = hasGender && ageNum
+    ? predictMaxHR({ methodId: "tanaka", age: ageNum, sex: form.gender })
+    : null;
+  const waterReference = waterReferenceFor({
+    sex: form.gender,
+    pregnant: false,
+    breastfeeding: false,
+  })?.total ?? null;
+
+  const percentMaxRanges = predictedMaxHR
+    ? calculatePercentMaxRanges(predictedMaxHR)
+    : null;
 
   const waistToHeightRatioRaw = waistCm && heightCm ? waistCm / heightCm : null;
   const waistToHeightRatio = waistToHeightRatioRaw != null
     ? waistToHeightRatioRaw.toFixed(2)
     : null;
 
-  const moderateHRRange = estimatedMaxHR > 0
-    ? { min: Math.round(estimatedMaxHR * 0.5), max: Math.round(estimatedMaxHR * 0.7) }
+  const moderateHRRange = percentMaxRanges
+    ? {
+        min: percentMaxRanges.moderate.min,
+        max: percentMaxRanges.moderate.max,
+      }
     : null;
-  const vigorousHRRange = estimatedMaxHR > 0
-    ? { min: Math.round(estimatedMaxHR * 0.7), max: Math.round(estimatedMaxHR * 0.85) }
+  const vigorousHRRange = percentMaxRanges
+    ? {
+        min: percentMaxRanges.vigorous.min,
+        max: percentMaxRanges.vigorous.max,
+      }
     : null;
 
   const getAerobicComparison = () => {
@@ -737,31 +712,31 @@ function TransformationForm() {
 
             <div>
               <label
-                htmlFor="transformation-activity"
+                htmlFor="transformation-pal"
                 className="block text-sm font-medium text-gray-700 dark:text-gray-300"
               >
-                General Activity Level
+                Physical Activity Level
               </label>
               <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                This helps estimate your daily energy requirements. Choose the option closest to your overall lifestyle.
+                {ADULT_PAL_DESCRIPTION_NOTE}
               </p>
               <select
-                id="transformation-activity"
-                name="activity"
-                value={form.activity}
+                id="transformation-pal"
+                name="palCategory"
+                value={form.palCategory}
                 onChange={handleChange}
                 className="mt-2 w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 dark:border-gray-600 dark:bg-gray-900 dark:text-gray-100"
               >
-                <option value="">Select your activity level</option>
-                {ACTIVITY_LEVELS.map((level) => (
-                  <option key={level.value} value={level.value}>
+                <option value="">Select activity category</option>
+                {PAL_LEVELS.map((level) => (
+                  <option key={level.id} value={level.id}>
                     {level.label} — {level.description}
                   </option>
                 ))}
               </select>
-              {errors.activity && (
-                <p id="activity-error" className="mt-1 text-sm text-red-600 dark:text-red-400" role="alert">
-                  {errors.activity}
+              {errors.palCategory && (
+                <p id="pal-error" className="mt-1 text-sm text-red-600 dark:text-red-400" role="alert">
+                  {errors.palCategory}
                 </p>
               )}
             </div>
@@ -1080,12 +1055,12 @@ function TransformationForm() {
             </h3>
             <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-3">
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
-                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Estimated Maintenance Calories</h4>
+                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Estimated Maintenance Energy</h4>
                 <p className="mt-2 text-3xl font-bold text-purple-600 dark:text-purple-400">{maintenanceCalories > 0 ? maintenanceCalories : "—"} kcal/day</p>
                 {maintenanceCalories > 0 ? (
-                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Mifflin–St Jeor resting energy estimate × activity factor. Estimated maintenance, not a dietary prescription.</p>
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">2023 Dietary Reference Intake adult Estimated Energy Requirement using your selected activity category.</p>
                 ) : (
-                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Please provide your equation-specific input and activity level to calculate maintenance calories.</p>
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Please provide your inputs and activity category to calculate maintenance energy.</p>
                 )}
               </div>
 
@@ -1113,9 +1088,9 @@ function TransformationForm() {
               </div>
 
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
-                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Water Intake Reference</h4>
+                <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Total Water Population Reference</h4>
                 <p className="mt-2 text-3xl font-bold text-blue-600 dark:text-blue-400">{waterReference > 0 ? waterReference.toFixed(1) : "—"} L/day</p>
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Approximate ~33 ml/kg body weight heuristic. Total water reference from beverages and food, not an individual prescription.</p>
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Total water from beverages and food (adult population reference). Not an individual prescription.</p>
               </div>
             </div>
           </div>
@@ -1130,26 +1105,26 @@ function TransformationForm() {
             <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-3">
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700">
                 <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Estimated Maximum Heart Rate</h4>
-                <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{estimatedMaxHR > 0 ? `${estimatedMaxHR} bpm` : "—"}</p>
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Predicted using 220 − age. Population-level estimate; actual max HR varies significantly.</p>
+                <p className="mt-2 text-3xl font-bold text-gray-900 dark:text-white">{predictedMaxHR > 0 ? `${predictedMaxHR} bpm` : "—"}</p>
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">Tanaka age-prediction estimate (208 − 0.7 × age). Population-level estimate; actual max HR varies significantly.</p>
               </div>
 
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700 border-l-4 border-emerald-500">
                 <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Moderate Intensity</h4>
                 <p className="mt-2 text-2xl font-bold text-emerald-600 dark:text-emerald-400">
-                  {moderateHRRange ? `${moderateHRRange.min} – ${moderateHRRange.max} bpm` : "—"}
+                  {percentMaxRanges ? `${percentMaxRanges.moderate.min} – ${percentMaxRanges.moderate.max} bpm` : "—"}
                 </p>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Talk Test: Talking is possible, but singing comfortably may be difficult.</p>
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">~50–70% of estimated max HR.</p>
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">65–75% of estimated max HR.</p>
               </div>
 
               <div className="rounded-xl bg-white p-5 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700 border-l-4 border-red-500">
                 <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400">Vigorous Intensity</h4>
                 <p className="mt-2 text-2xl font-bold text-red-600 dark:text-red-400">
-                  {vigorousHRRange ? `${vigorousHRRange.min} – ${vigorousHRRange.max} bpm` : "—"}
+                  {percentMaxRanges ? `${percentMaxRanges.vigorous.min} – ${percentMaxRanges.vigorous.max} bpm` : "—"}
                 </p>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Talk Test: Speaking more than a few words may require pausing for breath.</p>
-                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">~70–85% of estimated max HR.</p>
+                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">Talk Test: Speaking more than a few words requires pausing for breath.</p>
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">76–96% of estimated max HR.</p>
               </div>
             </div>
           </div>
@@ -1167,11 +1142,11 @@ function TransformationForm() {
                   <strong>Physical Activity:</strong> Your reported aerobic activity ({form.aerobicActivity ? AEROBIC_DURATION_OPTIONS.find((o) => o.value === form.aerobicActivity)?.label.toLowerCase() : "not provided"})
                   and strength training frequency ({form.strengthFrequency ? STRENGTH_FREQUENCY_OPTIONS.find((o) => o.value === form.strengthFrequency)?.label.toLowerCase() : "not provided"})
                   are compared with general adult guidelines.
-                  <strong>Energy & Nutrition:</strong> Estimated daily maintenance calories of {maintenanceCalories > 0 ? maintenanceCalories : "not available"} kcal/day
-                  (Mifflin–St Jeor resting energy estimate × activity factor). {maintenanceCalories > 0 ? `Example macronutrient distribution of ${protein}g protein / ${carbs}g carbs / ${fat}g fat (25%/45%/30% split).` : "Macronutrient distribution requires a valid maintenance calorie estimate."} General hydration estimate of {waterReference > 0 ? waterReference.toFixed(1) : "not available"} L/day.
-                  <strong>Exercise Intensity:</strong> Predicted max HR {estimatedMaxHR > 0 ? estimatedMaxHR + " bpm" : "—"} (220 − age),
-                  moderate range {moderateHRRange ? moderateHRRange.min + "–" + moderateHRRange.max + " bpm" : "—"}, 
-                  vigorous range {vigorousHRRange ? vigorousHRRange.min + "–" + vigorousHRRange.max + " bpm" : "—"}.
+                  <strong>Energy & Nutrition:</strong> Estimated maintenance energy of {maintenanceCalories > 0 ? maintenanceCalories : "not available"} kcal/day
+                  (2023 DRI adult Estimated Energy Requirement using your selected activity category). {maintenanceCalories > 0 ? `Example macronutrient distribution of ${protein}g protein / ${carbs}g carbs / ${fat}g fat (25%/45%/30% split).` : "Macronutrient distribution requires a valid maintenance calorie estimate."} Total water population reference of {waterReference > 0 ? waterReference.toFixed(1) : "not available"} L/day.
+                  <strong>Exercise Intensity:</strong> Estimated max HR {predictedMaxHR > 0 ? predictedMaxHR + " bpm" : "—"} (Tanaka estimate),
+                  moderate range {percentMaxRanges ? percentMaxRanges.moderate.min + "–" + percentMaxRanges.moderate.max + " bpm" : "—"},
+                  vigorous range {percentMaxRanges ? percentMaxRanges.vigorous.min + "–" + percentMaxRanges.vigorous.max + " bpm" : "—"}.
                 </>
               }
               whyItMatters={
@@ -1195,11 +1170,12 @@ function TransformationForm() {
                   Strength frequency alone doesn&apos;t confirm all guideline requirements (muscle groups, effort matter).
                   Age-specific guidance for minors/older adults is not implemented here.
                   <br /><br />
-                  <strong>Energy & Nutrition:</strong> Calorie estimate uses Mifflin–St Jeor (1990) resting energy estimate with population-average activity multipliers.
+                  <strong>Energy & Nutrition:</strong> Calorie estimate uses the 2023 DRI adult Estimated Energy Requirement with your selected activity category.
                   Not a weight-loss/gain prescription. Macronutrient split (25/45/30%) is illustrative only.
-                  Hydration (~33 ml/kg) is a rough heuristic; total water includes water from beverages and food. Heart failure, kidney disease, or fluid restrictions require medical guidance.
+                  Hydration is reported as a total-water population reference from beverages and food, not an individualized prescription. Heart failure, kidney disease, or fluid restrictions require medical guidance.
                   <br /><br />
-                  <strong>Exercise Intensity:</strong> Max HR (220 - age) is a population prediction; actual varies significantly. 
+                  <strong>Exercise Intensity:</strong> Max HR is an age-predicted estimate (Tanaka); actual varies significantly.
+                  Zone percentages are general ranges, not measured thresholds.
                   Zone percentages are general ranges, not measured thresholds. 
                   Cardiovascular conditions, heart-rate-altering medications (e.g., beta blockers), pregnancy, 
                   and individualized exercise restrictions may make standard ranges inappropriate. 
