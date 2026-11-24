@@ -314,7 +314,7 @@ test.describe("Service category context-aware Back navigation", () => {
     await page.getByLabel("Height (cm)").fill("175");
     await page.getByLabel("Weight (kg)").fill("70");
     await page.getByLabel("Equation-Specific Sex Input").selectOption("male");
-    await page.getByLabel("General Activity Level").selectOption("moderate");
+    await page.getByLabel("General Activity Level").selectOption("active");
     await page.getByLabel("What would you like to work on?").selectOption("strength");
     await page.getByLabel("How much aerobic activity do you usually do each week?").selectOption("lt75");
     await page.getByLabel("Typical intensity").selectOption("moderate");

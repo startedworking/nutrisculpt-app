@@ -19,7 +19,7 @@ const calculatorMenuItems = [
   { label: "Calorie Calculator", href: "/calories" },
   { label: "Macro Calculator", href: "/macros" },
   { label: "1RM Calculator", href: "/one-rm" },
-  { label: "Ideal Weight", href: "/ideal-weight" },
+  { label: "Reference Weight", href: "/ideal-weight" },
   { label: "Water Intake", href: "/water-intake" },
   { label: "Heart Rate Zones", href: "/heart-rate" },
 ];

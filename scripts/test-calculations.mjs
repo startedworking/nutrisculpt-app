@@ -19,8 +19,7 @@ import {
   calculateIdealWeight,
   calculateAllIdealWeights,
   idealWeightHealthyRange,
-  calculateBMR,
-  calculateTDEE,
+  calculateRMR,
   calculateTargetCalories,
   calculateMacros,
   CALORIE_GOALS,
@@ -282,25 +281,23 @@ test("calorie goal descriptions avoid weight-rate guarantees", () => {
 // Daily Calorie Calculator (Mifflin–St Jeor)
 // ---------------------------------------------------------------------------
 
-test("Mifflin-St Jeor BMR calculation", () => {
+test("Mifflin-St Jeor RMR calculation", () => {
   // Male: 70 kg, 170 cm, age 25 -> 10*70 + 6.25*170 - 5*25 + 5 = 1642.5
-  assert.equal(round(calculateBMR(70, 170, 25, "male"), 1), 1642.5);
+  assert.equal(round(calculateRMR(70, 170, 25, "male"), 1), 1642.5);
   // Female: 70 kg, 170 cm, age 25 -> 10*70 + 6.25*170 - 5*25 - 161 = 1476.5
-  assert.equal(round(calculateBMR(70, 170, 25, "female"), 1), 1476.5);
+  assert.equal(round(calculateRMR(70, 170, 25, "female"), 1), 1476.5);
 });
 
 test("calorie validation rejects invalid inputs", () => {
-  assert.equal(calculateBMR(0, 170, 25, "male"), null);
-  assert.equal(calculateBMR(70, 0, 25, "male"), null);
-  assert.equal(calculateBMR(70, 170, 200, "male"), null);
+  assert.equal(calculateRMR(0, 170, 25, "male"), null);
+  assert.equal(calculateRMR(70, 0, 25, "male"), null);
+  assert.equal(calculateRMR(70, 170, 200, "male"), null);
 });
 
-test("TDEE and target calorie calculation", () => {
-  const bmr = 1672.5;
-  assert.equal(round(calculateTDEE(bmr, 1.375), 1), 2299.7);
-  assert.equal(round(calculateTargetCalories(2299.7, -500), 1), 1799.7);
-  assert.equal(round(calculateTargetCalories(2299.7, 500), 1), 2799.7);
-  assert.equal(calculateTDEE(0, 1.375), null);
+test("target calorie calculation", () => {
+  assert.equal(round(calculateTargetCalories(1672.5, -500), 1), 1172.5);
+  assert.equal(round(calculateTargetCalories(1672.5, 0), 1), 1672.5);
+  assert.equal(round(calculateTargetCalories(1672.5, 500), 1), 2172.5);
   assert.equal(calculateTargetCalories(0, -500), null);
 });
 

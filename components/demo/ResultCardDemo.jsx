@@ -22,7 +22,7 @@ const ResultCardDemo = () => {
     calorie: {
       value: '2258',
       category: 'Maintain Weight',
-      subtitle: 'Goal: Maintain Weight | BMR: 1643 | TDEE: 2258'
+      subtitle: 'Goal: Maintain Weight | RMR: 1643 | EER: 2258'
     },
     macro: {
       value: '141g • 254g • 75g',
@@ -31,12 +31,12 @@ const ResultCardDemo = () => {
     },
     'heart-rate': {
       value: '150',
-      category: 'Zone 3',
+      category: 'Moderate Intensity',
       subtitle: 'Aerobic training zone'
     },
     'ideal-weight': {
       value: '68.5',
-      category: 'Medium Frame',
+      category: 'Reference Weight',
       subtitle: 'Healthy range: 60.2kg - 76.8kg'
     },
     'water-intake': {
@@ -243,7 +243,7 @@ const ResultCardDemo = () => {
   type="calorie" 
   value="2258" 
   category="Maintain Weight"
-  subtitle="Goal: Maintain Weight | BMR: 1643 | TDEE: 2258"
+  subtitle="Goal: Maintain Weight | RMR: 1643 | EER: 2258"
   theme="dark"
   aspectRatio="portrait"
 />`}</pre>

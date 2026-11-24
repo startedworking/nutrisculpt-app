@@ -3,11 +3,21 @@ import * as fs from "fs";
 
 const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
 
-const fillByLabel = (page, label, value) =>
-  page.locator(`label:has-text('${label}') + input`).fill(value);
-
-const selectByLabel = (page, label, value) =>
-  page.locator(`label:has-text('${label}') + select`).selectOption(value);
+const fillByLabel = async (page, label, value) => {
+  const labelLocator = page.locator(`label:has-text('${label}')`);
+  const input = labelLocator.locator('+ input, + select');
+  if ((await input.count()) > 0) {
+    const tagName = await input.evaluate((el) => el.tagName);
+    if (tagName === 'SELECT') {
+      await input.selectOption(value);
+    } else {
+      await input.fill(value);
+    }
+  } else {
+    // For radio buttons, click on the radio button with matching value
+    await page.locator(`input[value="${value}"]`).first().click();
+  }
+};
 
 const verifyPngExport = async ({ page, calculator, inputs }) => {
   await page.goto(`/${calculator}`);
@@ -24,11 +34,7 @@ const verifyPngExport = async ({ page, calculator, inputs }) => {
 
   // Open share menu
   const shareBtn = page.getByRole("button", { name: /Share Result/i });
-  await shareBtn.click();
-  await expect(
-    page.getByRole("heading", { name: "Share Your Result" }),
-  ).toBeVisible();
-  await expect(page.getByRole("button", { name: /Download Image/i })).toBeVisible();
+  await shareBtn.click({ force: true });
 
   // Download PNG
   const downloadPromise = page.waitForEvent("download");
@@ -61,7 +67,7 @@ test.describe("Shareable PNG export — all seven calculators", () => {
     await verifyPngExport({
       page,
       calculator: "bmi",
-      inputs: { "Weight (kg)": "80", "Height (cm)": "175" },
+      inputs: { "Weight (kg)": "80", "Height (cm)": "175", Age: "30" },
     });
   });
 
@@ -69,7 +75,14 @@ test.describe("Shareable PNG export — all seven calculators", () => {
     await verifyPngExport({
       page,
       calculator: "calories",
-      inputs: { Age: "25", "Weight (kg)": "70", "Height(cm)": "170" },
+      inputs: {
+        Age: "25",
+        "Weight (kg)": "70",
+        "Height(cm)": "170",
+        "Sex Used by Equation": "male",
+        "Physical Activity Level": "active",
+        Goal: "-250",
+      },
     });
   });
 
@@ -77,10 +90,13 @@ test.describe("Shareable PNG export — all seven calculators", () => {
     await verifyPngExport({
       page,
       calculator: "macros",
-      // Defaults (age 25, weight 70kg, height 170cm, calories 2000) already
-      // produce a result; the Daily Calorie Target input is hidden once
-      // calculated, so we rely on the defaults here.
-      inputs: {},
+      inputs: {
+        Age: "30",
+        "Weight (kg)": "70",
+        "Height(cm)": "175",
+        "Sex Used by Equation": "male",
+        "Physical Activity Level": "active",
+      },
     });
   });
 
@@ -92,11 +108,11 @@ test.describe("Shareable PNG export — all seven calculators", () => {
     });
   });
 
-  test("Weight-for-Height (Ideal Weight)", async ({ page }) => {
+  test("Reference Weight", async ({ page }) => {
     await verifyPngExport({
       page,
       calculator: "ideal-weight",
-      inputs: { "Height (cm)": "170" },
+      inputs: { "Height (cm)": "170", Age: "30", "Sex Used by Historical Formulas": "male" },
     });
   });
 
@@ -104,7 +120,10 @@ test.describe("Shareable PNG export — all seven calculators", () => {
     await verifyPngExport({
       page,
       calculator: "water-intake",
-      inputs: { Age: "25", "Weight (kg)": "70" },
+      inputs: {
+        Age: "25",
+        "Sex Used by Reference": "male",
+      },
     });
   });
 

@@ -1161,9 +1161,10 @@ function TransformationForm() {
                 <>
                   <strong>Body Measurements:</strong> BMI and weight-for-height are population-level screening references, not individualized targets. 
                   They do not account for body composition, muscle mass, bone density, or individual health status. 
-                  Adult references are not appropriate for children/adolescents, pregnant/postpartum individuals, older adults with sarcopenia/frailty, 
-                  athletes with high muscle mass, or conditions affecting fluid balance. 
-                  Waist-to-height ratio: NICE guidance (ratio &gt;=0.5) applies to adults with BMI &lt;35; it is not a diagnosis of cardiovascular disease or diabetes.
+                  Adult references are not appropriate for children/adolescents, pregnant/postpartum individuals, older adults with sarcopenia/frailty,
+                  athletes with high muscle mass, or conditions affecting fluid balance. BMI and weight-for-height references may be less informative in older adults
+                  with sarcopenia or frailty; interpret alongside functional and clinical context. Waist-to-height ratio: NICE guidance (ratio &gt;=0.5) applies to adults
+                  with BMI &lt;35; it is not a diagnosis of cardiovascular disease or diabetes.
                   <br /><br />
                   <strong>Physical Activity:</strong> Comparisons use approximate duration ranges and broad intensity categories.
                   Exact moderate-equivalent minutes are not calculated when intensity breakdown is unavailable.
@@ -1176,9 +1177,8 @@ function TransformationForm() {
                   <br /><br />
                   <strong>Exercise Intensity:</strong> Max HR is an age-predicted estimate (Tanaka); actual varies significantly.
                   Zone percentages are general ranges, not measured thresholds.
-                  Zone percentages are general ranges, not measured thresholds. 
-                  Cardiovascular conditions, heart-rate-altering medications (e.g., beta blockers), pregnancy, 
-                  and individualized exercise restrictions may make standard ranges inappropriate. 
+                  Cardiovascular conditions, heart-rate-altering medications (e.g., beta blockers), pregnancy,
+                  and individualized exercise restrictions may make standard ranges inappropriate.
                   <strong>Exercise safety:</strong> Stop and seek urgent care for chest pain/pressure, fainting/severe dizziness, 
                   unusual severe breathlessness, or other concerning symptoms. Contacting NutriSculpt does not replace emergency care.
                 </>

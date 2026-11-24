@@ -15,21 +15,21 @@ const CALCULATOR_CONFIGS = {
   },
   calorie: {
     icon: "🔥",
-    label: "CALORIES",
+    label: "CALORIE ESTIMATE",
     color: "#FF6B35",
     unit: "kcal/day",
     ringLabel: "Estimate",
   },
-  tdee: {
+  eer: {
     icon: "🔥",
-    label: "TDEE",
+    label: "EER",
     color: "#FF6B35",
     unit: "kcal/day",
     ringLabel: "Estimate",
   },
-  bmr: {
+  rmr: {
     icon: "🔥",
-    label: "BMR",
+    label: "RMR",
     color: "#FF6B35",
     unit: "kcal/day",
     ringLabel: "Estimate",
@@ -43,21 +43,21 @@ const CALCULATOR_CONFIGS = {
   },
   water: {
     icon: "💧",
-    label: "WATER",
+    label: "WATER REFERENCE",
     color: "#00D9FF",
     unit: "L/day",
     ringLabel: "Estimate",
   },
   heart: {
     icon: "❤️",
-    label: "HEART RATE",
+    label: "ESTIMATED MAXIMUM HEART RATE",
     color: "#EF4444",
     unit: "bpm",
     ringLabel: "Estimate",
   },
   idealWeight: {
     icon: "🎯",
-    label: "IDEAL WEIGHT",
+    label: "REFERENCE WEIGHT",
     color: "#8B5CF6",
     unit: "kg",
     ringLabel: "Reference",
@@ -72,23 +72,21 @@ const CALCULATOR_CONFIGS = {
 };
 
 const getColorByType = (type, value) => {
-  const val = parseFloat(value);
-  const colorMaps = {
-    bmi:
-      val < 18.5
-        ? "#3B82F6"
-        : val < 25
+  // BMI is the only type with established categorical thresholds; it keeps
+  // value-dependent coloring. All other types use their configured base color
+  // so no fabricated "good/bad/safe/unsafe" health status is implied by the
+  // numerical value alone.
+  if (type === "bmi") {
+    const val = parseFloat(value);
+    return val < 18.5
+      ? "#3B82F6"
+      : val < 25
         ? "#00F5A0"
         : val < 30
-        ? "#F59E0B"
-        : "#EF4444",
-    calorie: val < 1500 ? "#3B82F6" : val < 2500 ? "#00F5A0" : "#F59E0B",
-    tdee: val < 1500 ? "#3B82F6" : val < 2500 ? "#00F5A0" : "#F59E0B",
-    bmr: val < 1200 ? "#3B82F6" : val < 2000 ? "#00F5A0" : "#F59E0B",
-    water: val < 2 ? "#F59E0B" : val < 3.5 ? "#00F5A0" : "#3B82F6",
-    heart: val < 100 ? "#3B82F6" : val < 160 ? "#00F5A0" : "#EF4444",
-  };
-  return colorMaps[type] || CALCULATOR_CONFIGS[type]?.color || "#00F5A0";
+          ? "#F59E0B"
+          : "#EF4444";
+  }
+  return CALCULATOR_CONFIGS[type]?.color || "#00F5A0";
 };
 
 /**

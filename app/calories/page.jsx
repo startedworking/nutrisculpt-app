@@ -11,7 +11,7 @@ import HealthDisclaimer from "@/components/atoms/HealthDisclaimer";
 import { useShareableImage } from "@/hooks/useShareableImage";
 import CalculatorNextStep from "@/components/atoms/CalculatorNextStep";
 import {
-  calculateBMR,
+  calculateRMR,
   calculateAdultEER,
   calculateTargetCalories,
   ADULT_PAL_CATEGORIES,
@@ -119,7 +119,7 @@ export default function CalorieCalculator() {
     ) {
       return { rmr: null, eer: null, goalAdjustedCalories: null, inputsValid: false };
     }
-    const computedRMR = calculateBMR(weight.kg, height.cm, age, gender);
+    const computedRMR = calculateRMR(weight.kg, height.cm, age, gender);
     if (computedRMR == null) {
       return { rmr: null, eer: null, goalAdjustedCalories: null, inputsValid: false };
     }

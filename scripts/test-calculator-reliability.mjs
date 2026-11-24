@@ -6,8 +6,7 @@ import {
   kgToLb,
   lbToKg,
   parseFiniteNumber,
-  calculateBMR,
-  calculateTDEE,
+  calculateRMR,
   calculateAdultEER,
   ADULT_PAL_CATEGORIES,
   ADULT_AMDR,
@@ -93,17 +92,13 @@ test("parseFiniteNumber: -Infinity is null", () => {
 // Macro safety: blank / invalid inputs must not crash
 // ---------------------------------------------------------------------------
 
-test("macro: calculateBMR rejects blank/invalid weight/height/age (no crash)", () => {
-  assert.equal(calculateBMR(null, 170, 25, "male"), null);
-  assert.equal(calculateBMR(70, null, 25, "male"), null);
-  assert.equal(calculateBMR(70, 170, null, "male"), null);
+test("macro: calculateRMR rejects blank/invalid weight/height/age (no crash)", () => {
+  assert.equal(calculateRMR(null, 170, 25, "male"), null);
+  assert.equal(calculateRMR(70, null, 25, "male"), null);
+  assert.equal(calculateRMR(70, 170, null, "male"), null);
   // A valid gendered input produces a finite number (empty-string gender is
   // rejected by the page's !gender guard before calculation).
-  assert.ok(Number.isFinite(calculateBMR(70, 170, 25, "male")));
-});
-
-test("macro: calculateTDEE rejects null BMR (no crash)", () => {
-  assert.equal(calculateTDEE(null, 1.375), null);
+  assert.ok(Number.isFinite(calculateRMR(70, 170, 25, "male")));
 });
 
 test("macro: calculateMacros rejects zero/negative calories (no crash)", () => {
@@ -338,30 +333,34 @@ test("bmi: bmiHealthyRange rejects invalid height", () => {
 // Calories reliability (04D-2)
 // ---------------------------------------------------------------------------
 
-test("calories: calculateBMR rejects blank/invalid weight/height/age (no crash)", () => {
-  assert.equal(calculateBMR(null, 170, 25, "male"), null);
-  assert.equal(calculateBMR(70, null, 25, "male"), null);
-  assert.equal(calculateBMR(70, 170, null, "male"), null);
-  assert.equal(calculateBMR(0, 170, 25, "male"), null);
-  assert.equal(calculateBMR(70, 0, 25, "male"), null);
+test("calories: calculateRMR rejects blank/invalid weight/height/age (no crash)", () => {
+  assert.equal(calculateRMR(null, 170, 25, "male"), null);
+  assert.equal(calculateRMR(70, null, 25, "male"), null);
+  assert.equal(calculateRMR(70, 170, null, "male"), null);
+  assert.equal(calculateRMR(0, 170, 25, "male"), null);
+  assert.equal(calculateRMR(70, 0, 25, "male"), null);
   // Empty-string gender is rejected by the page's !gender guard before calling.
-  assert.ok(Number.isFinite(calculateBMR(70, 170, 25, "male")));
+  assert.ok(Number.isFinite(calculateRMR(70, 170, 25, "male")));
 });
 
-test("calories: calculateTDEE rejects null BMR (no crash)", () => {
-  assert.equal(calculateTDEE(null, 1.375), null);
-});
-
-test("calories: calculateTargetCalories rejects null TDEE (no crash)", () => {
+test("calories: calculateTargetCalories rejects null EER (no crash)", () => {
   assert.equal(calculateTargetCalories(null, 0), null);
 });
 
 test("calories: valid complete input produces finite outputs", () => {
-  const bmr = calculateBMR(70, 175, 30, "female");
-  assert.ok(Number.isFinite(bmr));
-  const tdee = calculateTDEE(bmr, 1.55);
-  assert.ok(Number.isFinite(tdee));
-  const target = calculateTargetCalories(tdee, 0);
+  const rmr = calculateRMR(70, 175, 30, "female");
+  assert.ok(Number.isFinite(rmr));
+
+  const eer = calculateAdultEER({
+    age: 30,
+    sex: "female",
+    weightKg: 70,
+    heightCm: 175,
+    palCategory: "active",
+  });
+
+  assert.ok(Number.isFinite(eer));
+  const target = calculateTargetCalories(eer, 0);
   assert.ok(Number.isFinite(target));
 });
 
@@ -541,11 +540,11 @@ test("04E-2A: Ideal Weight formulas produce different values (no artificial conv
 
 test("04E-2A: Mifflin calculation accepts adult age range (19-78 source population)", () => {
   // Valid within source population
-  assert.ok(Number.isFinite(calculateBMR(70, 175, 30, "male")));
-  assert.ok(Number.isFinite(calculateBMR(70, 175, 30, "female")));
+  assert.ok(Number.isFinite(calculateRMR(70, 175, 30, "male")));
+  assert.ok(Number.isFinite(calculateRMR(70, 175, 30, "female")));
   // Outside source population still calculates (extrapolation, flagged elsewhere)
-  assert.ok(Number.isFinite(calculateBMR(70, 175, 19, "male")));
-  assert.ok(Number.isFinite(calculateBMR(70, 175, 78, "male")));
+  assert.ok(Number.isFinite(calculateRMR(70, 175, 19, "male")));
+  assert.ok(Number.isFinite(calculateRMR(70, 175, 78, "male")));
 });
 
 test("04E-2A: Heart rate terminology - predicted HR is finite for valid adult", () => {
