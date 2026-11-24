@@ -14,6 +14,7 @@ import {
   MAX_HR_METHODS,
   computeHrZones,
   validateHeartRateInputs,
+  parseFiniteNumber,
 } from "@/lib/calculators.mjs";
 
 // Heart rate zone definitions
@@ -99,9 +100,9 @@ const TRAINING_GOALS = [
 ];
 
 export default function HeartRateZoneCalculator() {
-  const [age, setAge] = useState(25);
-  const [restingHR, setRestingHR] = useState(60);
-  const [maxHR, setMaxHR] = useState(195);
+  const [age, setAge] = useState(null);
+  const [restingHR, setRestingHR] = useState(null);
+  const [maxHR, setMaxHR] = useState(null);
   const [useCustomMaxHR, setUseCustomMaxHR] = useState(false);
   const [methodIndex, setMethodIndex] = useState(0);
   const [selectedGoal, setSelectedGoal] = useState("General Fitness");
@@ -231,8 +232,8 @@ export default function HeartRateZoneCalculator() {
             {/* Age */}
             <InputField
               label="Age"
-              value={age}
-              onChange={setAge}
+              value={age == null ? "" : age}
+              onChange={(value) => setAge(parseFiniteNumber(value))}
               type="number"
               placeholder="25"
               min="1"
@@ -247,8 +248,8 @@ export default function HeartRateZoneCalculator() {
             {/* Resting Heart Rate */}
             <InputField
               label="Resting Heart Rate (bpm)"
-              value={restingHR}
-              onChange={setRestingHR}
+              value={restingHR == null ? "" : restingHR}
+              onChange={(value) => setRestingHR(parseFiniteNumber(value))}
               type="number"
               placeholder="60"
               min="30"
@@ -330,8 +331,8 @@ export default function HeartRateZoneCalculator() {
             {useCustomMaxHR && (
               <InputField
                 label="Known Max Heart Rate (bpm)"
-                value={maxHR}
-                onChange={setMaxHR}
+                value={maxHR == null ? "" : maxHR}
+                onChange={(value) => setMaxHR(parseFiniteNumber(value))}
                 type="number"
                 placeholder="195"
                 min="120"

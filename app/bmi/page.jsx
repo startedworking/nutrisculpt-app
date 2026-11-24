@@ -15,6 +15,7 @@ import {
   calculateBMI,
   classifyBMI,
   bmiHealthyRange,
+  parseFiniteNumber,
 } from "@/lib/calculators";
 
 // Utility functions
@@ -38,62 +39,83 @@ const conversions = {
 
 export default function BmiCalculator() {
   const [unitSystem, setUnitSystem] = useState("metric");
-  const [age, setAge] = useState(25);
-
-  // Store both metric and imperial values
-  const [weight, setWeight] = useState({ kg: 70, lb: 154.3 });
-  const [height, setHeight] = useState({ cm: 170, ft: 5, in: 7 });
+  // No calculation-affecting defaults: every input starts blank/unselected.
+  const [age, setAge] = useState(null);
+  const [weight, setWeight] = useState({ kg: null, lb: null });
+  const [height, setHeight] = useState({ cm: null, ft: null, in: null });
 
   // Share functionality
   const { shareableCardRef, generateImage, generateShareData, validateResultForPrivacy } = useShareableImage('bmi');
 
-  // Weight handlers
+  // Weight handlers — convert only finite values; blank clears the pair.
   const handleWeightChange = (value, unit) => {
+    const parsed = parseFiniteNumber(value);
+    if (parsed == null) {
+      setWeight({ kg: null, lb: null });
+      return;
+    }
     if (unit === "kg") {
-      setWeight({ kg: value, lb: conversions.kgToLb(value) });
+      setWeight({ kg: parsed, lb: conversions.kgToLb(parsed) });
     } else {
-      setWeight({ kg: conversions.lbToKg(value), lb: value });
+      setWeight({ kg: conversions.lbToKg(parsed), lb: parsed });
     }
   };
 
-  // Height handlers
+  // Height handlers — convert only finite values; partial ft/in stays blank.
   const handleHeightChange = (value, unit) => {
+    const parsed = parseFiniteNumber(value);
+    if (parsed == null) {
+      setHeight({ cm: null, ft: null, in: null });
+      return;
+    }
     if (unit === "cm") {
-      const ftIn = conversions.cmToFtIn(value);
-      setHeight({ cm: value, ft: ftIn.ft, in: ftIn.in });
+      const ftIn = conversions.cmToFtIn(parsed);
+      setHeight({ cm: parsed, ft: ftIn.ft, in: ftIn.in });
     } else if (unit === "ft") {
-      const cm = conversions.ftInToCm(value, height.in);
-      setHeight({ cm, ft: value, in: height.in });
+      if (height.in == null) {
+        setHeight({ cm: null, ft: parsed, in: null });
+        return;
+      }
+      const cm = conversions.ftInToCm(parsed, height.in);
+      setHeight({ cm, ft: parsed, in: height.in });
     } else if (unit === "in") {
-      const cm = conversions.ftInToCm(height.ft, value);
-      setHeight({ cm, ft: height.ft, in: value });
+      if (height.ft == null) {
+        setHeight({ cm: null, ft: null, in: parsed });
+        return;
+      }
+      const cm = conversions.ftInToCm(height.ft, parsed);
+      setHeight({ cm, ft: height.ft, in: parsed });
     }
   };
 
-  // Calculate BMI and classification using verified helpers
-  const bmi = useMemo(
-    () => calculateBMI(weight.kg, height.cm),
-    [weight.kg, height.cm]
-  );
-  const classification = useMemo(
-    () => classifyBMI(bmi),
-    [bmi]
-  );
+  // Calculate BMI only when both measurements are valid.
+  const bmi = useMemo(() => {
+    if (weight.kg == null || height.cm == null) return null;
+    return calculateBMI(weight.kg, height.cm);
+  }, [weight.kg, height.cm]);
+
+  const classification = useMemo(() => {
+    if (bmi == null) return { label: "—", color: "text-gray-500" };
+    return classifyBMI(bmi);
+  }, [bmi]);
   const { label, color, obesityClass } = classification;
-  const healthyRange = bmiHealthyRange(height.cm);
+  const healthyRange = useMemo(() => {
+    if (height.cm == null) return null;
+    return bmiHealthyRange(height.cm);
+  }, [height.cm]);
 
   const isAdult = Number.isFinite(age) && age >= 18;
 
   // Prepare share data for BMI results
   const shareResult = useMemo(() => {
     if (!isFinite(bmi) || bmi <= 0) return null;
-    
+
     return validateResultForPrivacy({
       value: round(bmi, 1),
       category: label,
       healthyRange: healthyRange
         ? `${healthyRange.min[unitSystem === 'metric' ? 'kg' : 'lb']} - ${healthyRange.max[unitSystem === 'metric' ? 'kg' : 'lb']} ${unitSystem === 'metric' ? 'kg' : 'lbs'}`
-       : "—",
+        : "—",
     }, ['weight', 'height']); // Exclude sensitive input data
   }, [bmi, label, healthyRange, unitSystem, validateResultForPrivacy]);
 
@@ -107,6 +129,8 @@ export default function BmiCalculator() {
     return await generateImage();
   };
 
+  const displayValue = (v) => (v == null ? "" : v);
+
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
       <div className="mb-8 text-center">
@@ -117,7 +141,7 @@ export default function BmiCalculator() {
             Calculate your BMI and get instant health classification
           </p>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Example values shown — enter your own data for personalized results
+            Enter your own data for personalized results
           </p>
       </div>
 
@@ -134,21 +158,30 @@ export default function BmiCalculator() {
             <>
               <InputField
                 label="Weight (kg)"
-                value={weight.kg}
+                value={displayValue(weight.kg)}
                 onChange={(value) => handleWeightChange(value, "kg")}
+                type="number"
+                placeholder="70"
+                min="1"
               />
               <InputField
                 label="Height (cm)"
-                value={height.cm}
+                value={displayValue(height.cm)}
                 onChange={(value) => handleHeightChange(value, "cm")}
+                type="number"
+                placeholder="170"
+                min="1"
               />
             </>
           ) : (
             <>
               <InputField
                 label="Weight (lb)"
-                value={weight.lb}
+                value={displayValue(weight.lb)}
                 onChange={(value) => handleWeightChange(value, "lb")}
+                type="number"
+                placeholder="154"
+                min="1"
               />
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -157,15 +190,20 @@ export default function BmiCalculator() {
                 <div className="grid grid-cols-2 gap-3">
                   <InputField
                     label=""
-                    value={height.ft}
+                    value={displayValue(height.ft)}
                     onChange={(value) => handleHeightChange(value, "ft")}
+                    type="number"
                     placeholder="Feet"
+                    min="1"
                   />
                   <InputField
                     label=""
-                    value={height.in}
+                    value={displayValue(height.in)}
                     onChange={(value) => handleHeightChange(value, "in")}
+                    type="number"
                     placeholder="Inches"
+                    min="0"
+                    max="11"
                   />
                 </div>
               </div>
@@ -175,8 +213,8 @@ export default function BmiCalculator() {
           {/* Age */}
           <InputField
             label="Age"
-            value={age}
-            onChange={setAge}
+            value={displayValue(age)}
+            onChange={(value) => setAge(parseFiniteNumber(value))}
             type="number"
             placeholder="25"
             min="1"

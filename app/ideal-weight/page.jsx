@@ -14,6 +14,7 @@ import {
   calculateIdealWeight,
   calculateAllIdealWeights,
   idealWeightHealthyRange,
+  parseFiniteNumber,
 } from "@/lib/calculators";
 
 // Utility functions
@@ -44,27 +45,41 @@ const FRAME_TYPES = [
 
 export default function IdealWeightCalculator() {
   const [unitSystem, setUnitSystem] = useState("metric");
-  const [gender, setGender] = useState("male");
-  const [age, setAge] = useState(25);
-  const [frameType, setFrameType] = useState("medium");
+  // No calculation-affecting defaults: every input starts blank/unselected.
+  const [gender, setGender] = useState("");
+  const [age, setAge] = useState(null);
+  const [frameType, setFrameType] = useState("");
 
-  // Store both metric and imperial values
-  const [height, setHeight] = useState({ cm: 170, ft: 5, in: 7 });
+  // Store both metric and imperial values; null = blank / not provided.
+  const [height, setHeight] = useState({ cm: null, ft: null, in: null });
 
   // Share functionality
   const { shareableCardRef, generateImage, generateShareData, validateResultForPrivacy } = useShareableImage('ideal-weight');
 
-  // Height handlers
+  // Height handlers — convert only finite values; partial ft/in stays blank.
   const handleHeightChange = (value, unit) => {
+    const parsed = parseFiniteNumber(value);
+    if (parsed == null) {
+      setHeight({ cm: null, ft: null, in: null });
+      return;
+    }
     if (unit === "cm") {
-      const ftIn = conversions.cmToFtIn(value);
-      setHeight({ cm: value, ft: ftIn.ft, in: ftIn.in });
+      const ftIn = conversions.cmToFtIn(parsed);
+      setHeight({ cm: parsed, ft: ftIn.ft, in: ftIn.in });
     } else if (unit === "ft") {
-      const cm = conversions.ftInToCm(value, height.in);
-      setHeight({ cm, ft: value, in: height.in });
+      if (height.in == null) {
+        setHeight({ cm: null, ft: parsed, in: null });
+        return;
+      }
+      const cm = conversions.ftInToCm(parsed, height.in);
+      setHeight({ cm, ft: parsed, in: height.in });
     } else if (unit === "in") {
-      const cm = conversions.ftInToCm(height.ft, value);
-      setHeight({ cm, ft: height.ft, in: value });
+      if (height.ft == null) {
+        setHeight({ cm: null, ft: null, in: parsed });
+        return;
+      }
+      const cm = conversions.ftInToCm(height.ft, parsed);
+      setHeight({ cm, ft: height.ft, in: parsed });
     }
   };
 
@@ -187,8 +202,8 @@ export default function IdealWeightCalculator() {
             {/* Age */}
             <InputField
               label="Age"
-              value={age}
-              onChange={setAge}
+              value={age == null ? "" : age}
+              onChange={(value) => setAge(parseFiniteNumber(value))}
               type="number"
               placeholder="25"
               min="1"
@@ -199,7 +214,7 @@ export default function IdealWeightCalculator() {
             {unitSystem === "metric" ? (
               <InputField
                 label="Height (cm)"
-                value={height.cm}
+                value={height.cm == null ? "" : height.cm}
                 onChange={(value) => handleHeightChange(value, "cm")}
                 type="number"
                 placeholder="170"
@@ -210,7 +225,7 @@ export default function IdealWeightCalculator() {
                 <div className="flex-1">
                   <InputField
                     label="Height (ft)"
-                    value={height.ft}
+                    value={height.ft == null ? "" : height.ft}
                     onChange={(value) => handleHeightChange(value, "ft")}
                     type="number"
                     placeholder="5"
@@ -220,7 +235,7 @@ export default function IdealWeightCalculator() {
                 <div className="flex-1">
                   <InputField
                     label="Height (in)"
-                    value={height.in}
+                    value={height.in == null ? "" : height.in}
                     onChange={(value) => handleHeightChange(value, "in")}
                     type="number"
                     placeholder="7"

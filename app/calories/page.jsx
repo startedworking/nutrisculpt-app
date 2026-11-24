@@ -16,6 +16,7 @@ import {
   calculateTargetCalories,
   ACTIVITY_LEVELS,
   CALORIE_GOALS,
+  parseFiniteNumber,
 } from "@/lib/calculators";
 
 // Utility functions
@@ -39,14 +40,15 @@ const conversions = {
 
 export default function CalorieCalculator() {
   const [unitSystem, setUnitSystem] = useState("metric");
-  const [gender, setGender] = useState("male");
-  const [age, setAge] = useState(25);
-  const [activityLevel, setActivityLevel] = useState(1.375);
-  const [goal, setGoal] = useState(0);
+  // No calculation-affecting defaults: every input starts blank/unselected.
+  const [gender, setGender] = useState("");
+  const [age, setAge] = useState(null);
+  const [activityLevel, setActivityLevel] = useState(null);
+  const [goal, setGoal] = useState(null);
 
-  // Store both metric and imperial values
-  const [weight, setWeight] = useState({ kg: 70, lb: 154.3 });
-  const [height, setHeight] = useState({ cm: 170, ft: 5, in: 7 });
+  // Store both metric and imperial values; null = blank / not provided.
+  const [weight, setWeight] = useState({ kg: null, lb: null });
+  const [height, setHeight] = useState({ cm: null, ft: null, in: null });
 
   // Share functionality
   const {
@@ -56,39 +58,79 @@ export default function CalorieCalculator() {
     validateResultForPrivacy,
   } = useShareableImage("calories");
 
-  // Weight handlers
+  // Weight handlers — convert only finite values; blank clears the pair.
   const handleWeightChange = (value, unit) => {
+    const parsed = parseFiniteNumber(value);
+    if (parsed == null) {
+      setWeight({ kg: null, lb: null });
+      return;
+    }
     if (unit === "kg") {
-      setWeight({ kg: value, lb: conversions.kgToLb(value) });
+      setWeight({ kg: parsed, lb: conversions.kgToLb(parsed) });
     } else {
-      setWeight({ kg: conversions.lbToKg(value), lb: value });
+      setWeight({ kg: conversions.lbToKg(parsed), lb: parsed });
     }
   };
 
-  // Height handlers
+  // Height handlers — convert only finite values; partial ft/in stays blank.
   const handleHeightChange = (value, unit) => {
+    const parsed = parseFiniteNumber(value);
+    if (parsed == null) {
+      setHeight({ cm: null, ft: null, in: null });
+      return;
+    }
     if (unit === "cm") {
-      const ftIn = conversions.cmToFtIn(value);
-      setHeight({ cm: value, ft: ftIn.ft, in: ftIn.in });
+      const ftIn = conversions.cmToFtIn(parsed);
+      setHeight({ cm: parsed, ft: ftIn.ft, in: ftIn.in });
     } else if (unit === "ft") {
-      const cm = conversions.ftInToCm(value, height.in);
-      setHeight({ cm, ft: value, in: height.in });
+      if (height.in == null) {
+        setHeight({ cm: null, ft: parsed, in: null });
+        return;
+      }
+      const cm = conversions.ftInToCm(parsed, height.in);
+      setHeight({ cm, ft: parsed, in: height.in });
     } else if (unit === "in") {
-      const cm = conversions.ftInToCm(height.ft, value);
-      setHeight({ cm, ft: height.ft, in: value });
+      if (height.ft == null) {
+        setHeight({ cm: null, ft: null, in: parsed });
+        return;
+      }
+      const cm = conversions.ftInToCm(height.ft, parsed);
+      setHeight({ cm, ft: height.ft, in: parsed });
     }
   };
 
-  // Calculate calories using verified helpers
-  const { bmr, tdee, targetCalories } = useMemo(() => {
-    const bmr = calculateBMR(weight.kg, height.cm, age, gender);
-    const tdee = calculateTDEE(bmr, activityLevel);
-    const targetCalories = calculateTargetCalories(tdee, goal);
+  const displayValue = (v) => (v == null ? "" : v);
 
+  // Calculate calories only when every required input is valid. Returns null
+  // for any invalid input so no NaN/0 leaks into rendering.
+  const { bmr, tdee, targetCalories, inputsValid } = useMemo(() => {
+    if (
+      weight.kg == null ||
+      height.cm == null ||
+      age == null ||
+      !gender ||
+      activityLevel == null ||
+      goal == null
+    ) {
+      return { bmr: null, tdee: null, targetCalories: null, inputsValid: false };
+    }
+    const computedBMR = calculateBMR(weight.kg, height.cm, age, gender);
+    if (computedBMR == null) {
+      return { bmr: null, tdee: null, targetCalories: null, inputsValid: false };
+    }
+    const computedTDEE = calculateTDEE(computedBMR, activityLevel);
+    if (computedTDEE == null) {
+      return { bmr: null, tdee: null, targetCalories: null, inputsValid: false };
+    }
+    const computedTarget = calculateTargetCalories(computedTDEE, goal);
+    if (computedTarget == null) {
+      return { bmr: null, tdee: null, targetCalories: null, inputsValid: false };
+    }
     return {
-      bmr: bmr ? round(bmr) : 0,
-      tdee: tdee ? round(tdee) : 0,
-      targetCalories: targetCalories ? round(targetCalories) : 0,
+      bmr: round(computedBMR),
+      tdee: round(computedTDEE),
+      targetCalories: round(computedTarget),
+      inputsValid: true,
     };
   }, [weight.kg, height.cm, age, gender, activityLevel, goal]);
 
@@ -128,6 +170,8 @@ export default function CalorieCalculator() {
     return await generateImage();
   };
 
+  const genderChecked = (g) => gender === g;
+
   return (
     <>
       <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
@@ -145,7 +189,7 @@ export default function CalorieCalculator() {
             level
           </p>
           <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-            Example values shown — enter your own data for personalized results
+            Enter your own data for personalized results
           </p>
         </motion.div>
 
@@ -178,7 +222,7 @@ export default function CalorieCalculator() {
                         type="radio"
                         name="gender"
                         value={g}
-                        checked={gender === g}
+                        checked={genderChecked(g)}
                         onChange={(e) => setGender(e.target.value)}
                         className="mr-2 h-4 w-4 text-blue-600"
                       />
@@ -188,13 +232,18 @@ export default function CalorieCalculator() {
                     </label>
                   ))}
                 </div>
+                {!gender && (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+                    Please select your gender.
+                  </p>
+                )}
               </div>
 
               {/* Age */}
               <InputField
                 label="Age"
-                value={age}
-                onChange={setAge}
+                value={displayValue(age)}
+                onChange={(value) => setAge(parseFiniteNumber(value))}
                 type="number"
                 placeholder="25"
                 min="1"
@@ -207,7 +256,9 @@ export default function CalorieCalculator() {
                 <div className="flex-1">
                   <InputField
                     label={`Weight (${unitSystem === "metric" ? "kg" : "lbs"})`}
-                    value={unitSystem === "metric" ? weight.kg : weight.lb}
+                    value={displayValue(
+                      unitSystem === "metric" ? weight.kg : weight.lb,
+                    )}
                     onChange={(value) =>
                       handleWeightChange(
                         value,
@@ -226,7 +277,7 @@ export default function CalorieCalculator() {
               {unitSystem === "metric" ? (
                 <InputField
                   label="Height(cm)"
-                  value={height.cm}
+                  value={displayValue(height.cm)}
                   onChange={(value) => handleHeightChange(value, "cm")}
                   type="number"
                   placeholder="170"
@@ -238,7 +289,7 @@ export default function CalorieCalculator() {
                   <div className="flex-1">
                     <InputField
                       label="Height (ft)"
-                      value={height.ft}
+                      value={displayValue(height.ft)}
                       onChange={(value) => handleHeightChange(value, "ft")}
                       type="number"
                       placeholder="5"
@@ -249,7 +300,7 @@ export default function CalorieCalculator() {
                   <div className="flex-1">
                     <InputField
                       label="Height (in)"
-                      value={height.in}
+                      value={displayValue(height.in)}
                       onChange={(value) => handleHeightChange(value, "in")}
                       type="number"
                       placeholder="7"
@@ -287,16 +338,24 @@ export default function CalorieCalculator() {
                   Activity Level
                 </label>
                 <select
-                  value={activityLevel}
-                  onChange={(e) => setActivityLevel(parseFloat(e.target.value))}
+                  value={activityLevel == null ? "" : activityLevel}
+                  onChange={(e) =>
+                    setActivityLevel(parseFiniteNumber(e.target.value))
+                  }
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                 >
+                  <option value="">Select activity level</option>
                   {ACTIVITY_LEVELS.map((level) => (
                     <option key={level.value} value={level.value}>
                       {level.label} - {level.description}
                     </option>
                   ))}
                 </select>
+                {activityLevel == null && (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+                    Please select your activity level.
+                  </p>
+                )}
               </div>
 
               {/* Goal Selection */}
@@ -305,16 +364,22 @@ export default function CalorieCalculator() {
                   Goal
                 </label>
                 <select
-                  value={goal}
-                  onChange={(e) => setGoal(parseInt(e.target.value))}
+                  value={goal == null ? "" : goal}
+                  onChange={(e) => setGoal(parseFiniteNumber(e.target.value))}
                   className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
                 >
+                  <option value="">Select a goal</option>
                   {CALORIE_GOALS.map((g) => (
                     <option key={g.value} value={g.value}>
                       {g.label} - {g.description}
                     </option>
                   ))}
                 </select>
+                {goal == null && (
+                  <p className="mt-1 text-xs text-red-600 dark:text-red-400" role="alert">
+                    Please select a goal.
+                  </p>
+                )}
               </div>
             </div>
           </div>
@@ -333,208 +398,222 @@ export default function CalorieCalculator() {
         </motion.div>
 
         {/* Results Section */}
-        <div className="mt-8 grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-          {/* BMR Result */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.4 }}
-            className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
-          >
-            <div className="text-center">
-              <h3 className="mb-4 text-lg font-semibold">
-                Basal Metabolic Rate
-              </h3>
-              <div className="mb-4">
-                <p className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-400">
-                  {bmr}
-                </p>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                  calories/day
+        {inputsValid ? (
+          <div className="mt-8 grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+            {/* BMR Result */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.4 }}
+              className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
+            >
+              <div className="text-center">
+                <h3 className="mb-4 text-lg font-semibold">
+                  Basal Metabolic Rate
+                </h3>
+                <div className="mb-4">
+                  <p className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-400">
+                    {bmr}
+                  </p>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                    calories/day
+                  </p>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Calories burned at rest
                 </p>
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                Calories burned at rest
-              </p>
-            </div>
-          </motion.div>
+            </motion.div>
 
-          {/* TDEE Result */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.5 }}
-            className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
-          >
-            <div className="text-center">
-              <h3 className="mb-4 text-lg font-semibold">
-                Maintenance Calories
-              </h3>
-              <div className="mb-4">
-                <p className="text-4xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400">
-                  {tdee}
-                </p>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                  calories/day
+            {/* TDEE Result */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.5 }}
+              className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
+            >
+              <div className="text-center">
+                <h3 className="mb-4 text-lg font-semibold">
+                  Maintenance Calories
+                </h3>
+                <div className="mb-4">
+                  <p className="text-4xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400">
+                    {tdee}
+                  </p>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                    calories/day
+                  </p>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  With {selectedActivity?.label.toLowerCase()} lifestyle
                 </p>
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                With {selectedActivity?.label.toLowerCase()} lifestyle
-              </p>
-            </div>
-          </motion.div>
+            </motion.div>
 
-          {/* Target Calories Result */}
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.6, delay: 0.6 }}
-            className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
-          >
-            <div className="text-center">
-              <h3 className="mb-4 text-lg font-semibold">Target Calories</h3>
-              <div className="mb-4">
-                <p className="text-4xl font-extrabold tracking-tight text-purple-600 dark:text-purple-400">
-                  {targetCalories}
-                </p>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                  calories/day
+            {/* Target Calories Result */}
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.6 }}
+              className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
+            >
+              <div className="text-center">
+                <h3 className="mb-4 text-lg font-semibold">Target Calories</h3>
+                <div className="mb-4">
+                  <p className="text-4xl font-extrabold tracking-tight text-purple-600 dark:text-purple-400">
+                    {targetCalories}
+                  </p>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                    calories/day
+                  </p>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  To {selectedGoal?.label.toLowerCase()}
                 </p>
               </div>
-              <p className="text-xs text-gray-500 dark:text-gray-400">
-                To {selectedGoal?.label.toLowerCase()}
-              </p>
-            </div>
-          </motion.div>
-        </div>
+            </motion.div>
+          </div>
+        ) : (
+          <div className="mt-8 rounded-xl bg-gray-50 p-8 text-center dark:bg-gray-800/50">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Complete your details above to see your calorie targets.
+            </p>
+          </div>
+        )}
 
         {/* Educational explanation */}
-        <div className="mt-6">
-          <ResultExplanation
-            whatItMeans={
-              <>
-                Your{" "}
-                <span className="font-semibold">
-                  Basal Metabolic Rate (BMR)
-                </span>{" "}
-                of {bmr} calories/day is the energy your body needs at rest
-                for basic functions. Your{" "}
-                <span className="font-semibold">
-                  maintenance calories (TDEE)
-                </span>{" "}
-                of {tdee} calories/day includes your daily activity. Your{" "}
-                <span className="font-semibold">target</span> of{" "}
-                {targetCalories} calories/day is adjusted for your goal of{" "}
-                {selectedGoal?.label.toLowerCase()}.
-              </>
-            }
-            whyItMatters={
-              <>
-                Eating at a moderate deficit below your maintenance calories
-                can lead to gradual weight loss, while eating above them
-                supports weight gain. Matching your intake to your goal is
-                key to achieving lasting results.
-              </>
-            }
-            limitations={
-              <>
-                These calculations are estimates based on general formulas.
-                Actual energy needs vary between individuals based on
-                metabolism, muscle mass, genetics, medical conditions, and
-                other factors. Use these numbers as a guide, not a fixed rule,
-                and adjust based on your progress and how you feel.
-              </>
-            }
-          />
-        </div>
+        {inputsValid && (
+          <div className="mt-6">
+            <ResultExplanation
+              whatItMeans={
+                <>
+                  Your{" "}
+                  <span className="font-semibold">
+                    Basal Metabolic Rate (BMR)
+                  </span>{" "}
+                  of {bmr} calories/day is the energy your body needs at rest
+                  for basic functions. Your{" "}
+                  <span className="font-semibold">
+                    maintenance calories (TDEE)
+                  </span>{" "}
+                  of {tdee} calories/day includes your daily activity. Your{" "}
+                  <span className="font-semibold">target</span> of{" "}
+                  {targetCalories} calories/day is adjusted for your goal of{" "}
+                  {selectedGoal?.label.toLowerCase()}.
+                </>
+              }
+              whyItMatters={
+                <>
+                  Eating at a moderate deficit below your maintenance calories
+                  can lead to gradual weight loss, while eating above them
+                  supports weight gain. Matching your intake to your goal is
+                  key to achieving lasting results.
+                </>
+              }
+              limitations={
+                <>
+                  These calculations are estimates based on general formulas.
+                  Actual energy needs vary between individuals based on
+                  metabolism, muscle mass, genetics, medical conditions, and
+                  other factors. Use these numbers as a guide, not a fixed rule,
+                  and adjust based on your progress and how you feel.
+                </>
+              }
+            />
+          </div>
+        )}
 
         {/* Macronutrient Breakdown */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.7 }}
-          className="mt-8 rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
-        >
-          <h3 className="mb-6 text-center text-lg font-semibold">
-            Illustrative Macronutrient Distribution
-          </h3>
-          <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {[
-              {
-                name: "Protein",
-                percentage: 25,
-                color: "text-red-600 dark:text-red-400",
-                bgColor: "bg-red-100 dark:bg-red-700/20",
-                calories: round(targetCalories * 0.25),
-                grams: round((targetCalories * 0.25) / 4),
-              },
-              {
-                name: "Carbohydrates",
-                percentage: 45,
-                color: "text-blue-600 dark:text-blue-400",
-                bgColor: "bg-blue-100 dark:bg-blue-700/20",
-                calories: round(targetCalories * 0.45),
-                grams: round((targetCalories * 0.45) / 4),
-              },
-              {
-                name: "Fats",
-                percentage: 30,
-                color: "text-yellow-600 dark:text-yellow-400",
-                bgColor: "bg-yellow-100 dark:bg-yellow-700/20",
-                calories: round(targetCalories * 0.3),
-                grams: round((targetCalories * 0.3) / 9),
-              },
-            ].map(({ name, percentage, color, bgColor, calories, grams }) => (
-              <div
-                key={name}
-                className={`rounded-lg p-4 text-center ${bgColor}`}
-              >
-                <h4 className={`text-lg font-bold ${color}`}>{name}</h4>
-                <p className="mt-1 text-sm font-semibold">{percentage}%</p>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                  {calories} calories
-                </p>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  {grams}g per day
-                </p>
-              </div>
-            ))}
-          </div>
-        </motion.div>
+        {inputsValid && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.7 }}
+            className="mt-8 rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
+          >
+            <h3 className="mb-6 text-center text-lg font-semibold">
+              Illustrative Macronutrient Distribution
+            </h3>
+            <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+              {[
+                {
+                  name: "Protein",
+                  percentage: 25,
+                  color: "text-red-600 dark:text-red-400",
+                  bgColor: "bg-red-100 dark:bg-red-700/20",
+                  calories: round(targetCalories * 0.25),
+                  grams: round((targetCalories * 0.25) / 4),
+                },
+                {
+                  name: "Carbohydrates",
+                  percentage: 45,
+                  color: "text-blue-600 dark:text-blue-400",
+                  bgColor: "bg-blue-100 dark:bg-blue-700/20",
+                  calories: round(targetCalories * 0.45),
+                  grams: round((targetCalories * 0.45) / 4),
+                },
+                {
+                  name: "Fats",
+                  percentage: 30,
+                  color: "text-yellow-600 dark:text-yellow-400",
+                  bgColor: "bg-yellow-100 dark:bg-yellow-700/20",
+                  calories: round(targetCalories * 0.3),
+                  grams: round((targetCalories * 0.3) / 9),
+                },
+              ].map(({ name, percentage, color, bgColor, calories, grams }) => (
+                <div
+                  key={name}
+                  className={`rounded-lg p-4 text-center ${bgColor}`}
+                >
+                  <h4 className={`text-lg font-bold ${color}`}>{name}</h4>
+                  <p className="mt-1 text-sm font-semibold">{percentage}%</p>
+                  <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                    {calories} calories
+                  </p>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    {grams}g per day
+                  </p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* Tips Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.6, delay: 0.8 }}
-          className="mt-8 rounded-xl bg-gradient-to-r from-blue-50 to-purple-50 p-6 dark:from-blue-900/20 dark:to-purple-900/20"
-        >
-          <h3 className="mb-4 text-center text-lg font-semibold">
-            💡 Quick Tips
-          </h3>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div className="space-y-2">
-              <h4 className="font-medium text-blue-600 dark:text-blue-400">
-                For Weight Loss:
-              </h4>
-              <ul className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
-                <li>• Create a moderate calorie deficit</li>
-                <li>• Focus on protein to preserve muscle</li>
-                <li>• Stay hydrated and get adequate sleep</li>
-              </ul>
+        {inputsValid && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.8 }}
+            className="mt-8 rounded-xl bg-gradient-to-r from-blue-50 to-purple-50 p-6 dark:from-blue-900/20 dark:to-purple-900/20"
+          >
+            <h3 className="mb-4 text-center text-lg font-semibold">
+              💡 Quick Tips
+            </h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <h4 className="font-medium text-blue-600 dark:text-blue-400">
+                  For Weight Loss:
+                </h4>
+                <ul className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
+                  <li>• Create a moderate calorie deficit</li>
+                  <li>• Focus on protein to preserve muscle</li>
+                  <li>• Stay hydrated and get adequate sleep</li>
+                </ul>
+              </div>
+              <div className="space-y-2">
+                <h4 className="font-medium text-emerald-600 dark:text-emerald-400">
+                  For Weight Gain:
+                </h4>
+                <ul className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
+                  <li>• Eat nutrient-dense, calorie-rich foods</li>
+                  <li>• Include healthy fats and complex carbs</li>
+                  <li>• Combine with strength training</li>
+                </ul>
+              </div>
             </div>
-            <div className="space-y-2">
-              <h4 className="font-medium text-emerald-600 dark:text-emerald-400">
-                For Weight Gain:
-              </h4>
-              <ul className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
-                <li>• Eat nutrient-dense, calorie-rich foods</li>
-                <li>• Include healthy fats and complex carbs</li>
-                <li>• Combine with strength training</li>
-              </ul>
-            </div>
-          </div>
-        </motion.div>
+          </motion.div>
+        )}
 
         {/* Health Disclaimer */}
         <div className="mt-6">

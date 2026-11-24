@@ -20,6 +20,7 @@ import {
   estimateOneRM,
   estimateAllOneRM,
   oneRmReliability,
+  parseFiniteNumber,
 } from "@/lib/calculators.mjs";
 
 // Training percentage ranges.
@@ -51,20 +52,25 @@ const EXERCISE_CATEGORIES = [
 export default function OneRMCalculator() {
   const [unitSystem, setUnitSystem] = useState("metric");
   const [exercise, setExercise] = useState("Bench Press");
-  const [reps, setReps] = useState(5);
+  const [reps, setReps] = useState(null);
   
-  // Store both metric and imperial values
-  const [weight, setWeight] = useState({ kg: 80, lb: 176.4 });
+  // Store both metric and imperial values; null = blank / not provided.
+  const [weight, setWeight] = useState({ kg: null, lb: null });
 
   // Share functionality
   const { shareableCardRef, generateImage, generateShareData, validateResultForPrivacy } = useShareableImage('one-rm');
 
-  // Weight handlers
+  // Weight handlers — convert only finite values; blank clears the pair.
   const handleWeightChange = (value, unit) => {
+    const parsed = parseFiniteNumber(value);
+    if (parsed == null) {
+      setWeight({ kg: null, lb: null });
+      return;
+    }
     if (unit === "kg") {
-      setWeight({ kg: value, lb: round(kgToLb(value), 1) });
+      setWeight({ kg: parsed, lb: round(kgToLb(parsed), 1) });
     } else {
-      setWeight({ kg: round(lbToKg(value), 1), lb: value });
+      setWeight({ kg: round(lbToKg(parsed), 1), lb: parsed });
     }
   };
 
@@ -212,7 +218,7 @@ export default function OneRMCalculator() {
           {/* Weight Input */}
           <InputField
             label={`Weight (${unitSystem === "metric" ? "kg" : "lbs"})`}
-            value={unitSystem === "metric" ? weight.kg : weight.lb}
+            value={unitSystem === "metric" ? (weight.kg == null ? "" : weight.kg) : (weight.lb == null ? "" : weight.lb)}
             onChange={(value) =>
               handleWeightChange(
                 value,
@@ -227,8 +233,8 @@ export default function OneRMCalculator() {
           {/* Reps Input */}
           <InputField
             label="Reps Performed"
-            value={reps}
-            onChange={setReps}
+            value={reps == null ? "" : reps}
+            onChange={(value) => setReps(parseFiniteNumber(value))}
             type="number"
             placeholder="5"
             min="1"
