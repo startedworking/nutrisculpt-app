@@ -15,6 +15,7 @@ import {
   calculateAllIdealWeights,
   idealWeightHealthyRange,
   parseFiniteNumber,
+  kgToLb,
 } from "@/lib/calculators";
 
 // Utility functions
@@ -133,7 +134,12 @@ export default function IdealWeightCalculator() {
       value: rangeValue,
       unit: unitSystem === 'metric' ? 'kg' : 'lbs',
       healthyRange: rangeValue,
-      referencePoint: round(referenceWeight, 1),
+      // referenceWeight is always kilograms; convert the secondary BMI-22
+      // reference point for Imperial display before final rounding.
+      referencePoint: round(
+        unitSystem === 'metric' ? referenceWeight : kgToLb(referenceWeight),
+        1
+      ),
     }, ['height', 'age', 'gender']); // Exclude sensitive input data
   }, [referenceWeight, healthyRange, unitSystem, validateResultForPrivacy]);
 

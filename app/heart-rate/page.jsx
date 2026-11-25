@@ -107,9 +107,9 @@ export default function HeartRateZoneCalculator() {
       {
         goal: selectedGoal,
         maxHR: effectiveMaxHR,
-        maxHRLabel: useCustomMaxHR
-          ? "Entered maximum heart rate"
-          : "Estimated maximum heart rate",
+        // Concise, complete card label that fits without truncation while still
+        // distinguishing an entered (measured) max HR from a predicted estimate.
+        maxHRLabel: useCustomMaxHR ? "ENTERED MAX HR" : "HRMAX ESTIMATE",
         method: method.name,
       },
       ["age", "sex", "restingHR"] // Exclude sensitive input data

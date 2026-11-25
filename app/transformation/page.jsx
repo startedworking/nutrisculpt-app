@@ -403,9 +403,15 @@ function TransformationForm() {
       })
     : null;
   const maintenanceCalories = eer ? Math.round(eer) : 0;
-  const protein = maintenanceCalories > 0 ? Math.round((maintenanceCalories * 0.25) / 4) : 0;
-  const carbs = maintenanceCalories > 0 ? Math.round((maintenanceCalories * 0.45) / 4) : 0;
-  const fat = maintenanceCalories > 0 ? Math.round((maintenanceCalories * 0.3) / 9) : 0;
+  // Illustrative Balanced 25/45/30 split via the shared macro helper. The
+  // full-precision EER is the calculation input; grams are rounded only for
+  // display, matching the standalone Macro calculator's use of calculateMacros.
+  const macroBreakdown = eer
+    ? calculateMacros(eer, { protein: 25, carbs: 45, fat: 30 })
+    : null;
+  const protein = macroBreakdown ? macroBreakdown.protein.grams : 0;
+  const carbs = macroBreakdown ? macroBreakdown.carbs.grams : 0;
+  const fat = macroBreakdown ? macroBreakdown.fat.grams : 0;
 
   const predictedMaxHR = hasGender && ageNum
     ? predictMaxHR({ methodId: "tanaka", age: ageNum, sex: form.gender })

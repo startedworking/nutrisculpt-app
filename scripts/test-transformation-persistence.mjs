@@ -20,10 +20,12 @@ const approx = (actual, expected, tolerance = TOL) => {
   );
 };
 
+// Mirrors the actual live Transformation form shape: the selected DRI PAL id
+// is stored as `palCategory` (not a legacy `activity` key).
 const baseForm = {
   age: "35",
   gender: "female",
-  activity: "active",
+  palCategory: "active",
   primaryGoal: "health",
   aerobicActivity: "150_299",
   aerobicIntensity: "moderate",
@@ -97,6 +99,38 @@ test("valid completed payload accepted (Imperial display preference preserved)",
   const result = validateTransformationSessionPayload(payload);
   assert.ok(result);
   assert.equal(result.unitSystem, "imperial");
+});
+
+test("regression: live form shape (palCategory) validates and restores the PAL", () => {
+  // The actual form stores the DRI PAL id as `palCategory` and has no
+  // `activity` key. The persistence boundary must map it so the generated
+  // payload passes validation and restores the selected category.
+  const liveForm = {
+    age: "35",
+    gender: "female",
+    palCategory: "low_active",
+    primaryGoal: "health",
+    aerobicActivity: "150_299",
+    aerobicIntensity: "moderate",
+    strengthFrequency: "3_4",
+    healthConsiderations: "no",
+  };
+  assert.equal("activity" in liveForm, false);
+
+  const payload = createTransformationSessionPayload({
+    unitSystem: "imperial",
+    canonical: baseCanonical,
+    form: liveForm,
+  });
+  assert.equal(payload.inputs.activity, "low_active");
+
+  const result = validateTransformationSessionPayload(payload);
+  assert.ok(result, "live-form payload must pass validation");
+  assert.equal(result.inputs.activity, "low_active");
+  assert.equal(result.unitSystem, "imperial");
+  assert.equal(result.inputs.weightKg, 70);
+  assert.equal(result.inputs.heightCm, 175);
+  assert.equal(result.inputs.waistCm, 85);
 });
 
 test("missing payload returns null", () => {

@@ -160,7 +160,12 @@ export default function OneRMCalculator() {
 
     const primaryValue = oneRMResults.primary.value;
     return validateResultForPrivacy({
-      value: round(primaryValue, 0),
+      // primaryValue is always kilograms; convert for the Imperial share so the
+      // shared value and unit agree with the on-page display.
+      value: round(
+        unitSystem === 'metric' ? primaryValue : kgToLb(primaryValue),
+        0
+      ),
       unit: unitSystem === 'metric' ? 'kg' : 'lb',
       exercise: exercise,
       repsUsed: reps,
