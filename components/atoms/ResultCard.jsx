@@ -112,6 +112,7 @@ const ResultCard = forwardRef(
       value,
       category,
       subtitle,
+      details = null,
       aspectRatio = "square",
       className = "",
       unit = null,
@@ -230,6 +231,21 @@ const ResultCard = forwardRef(
               }}
             >
               <div className="truncate">{subtitle}</div>
+            </div>
+          )}
+
+          {/* Supporting details (compact, non-truncating) */}
+          {Array.isArray(details) && details.length > 0 && (
+            <div className="mt-1 w-full px-2 text-center">
+              {details.map((detail) => (
+                <div
+                  key={detail.label}
+                  className="text-[11px] leading-tight text-slate-300"
+                >
+                  <span className="text-slate-400">{detail.label}:</span>{" "}
+                  {detail.value}
+                </div>
+              ))}
             </div>
           )}
         </div>

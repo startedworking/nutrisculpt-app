@@ -14,6 +14,7 @@ import {
   calculateRMR,
   calculateAdultEER,
   calculateTargetCalories,
+  calculateMacros,
   ADULT_PAL_CATEGORIES,
   ADULT_PAL_DESCRIPTION_NOTE,
   CALORIE_GOALS,
@@ -108,7 +109,7 @@ export default function CalorieCalculator() {
   // for any invalid input so no NaN/0 leaks into rendering.
   // Maintenance energy now uses the 2023 DRI adult EER equation (age 19+);
   // Mifflin RMR is shown separately as a resting reference.
-  const { rmr, eer, goalAdjustedCalories, inputsValid } = useMemo(() => {
+  const { rmr, eer, goalAdjustedCalories, eerRaw, goalAdjustedRaw, inputsValid } = useMemo(() => {
     if (
       weight.kg == null ||
       height.cm == null ||
@@ -117,11 +118,11 @@ export default function CalorieCalculator() {
       palCategory == null ||
       goal == null
     ) {
-      return { rmr: null, eer: null, goalAdjustedCalories: null, inputsValid: false };
+      return { rmr: null, eer: null, goalAdjustedCalories: null, eerRaw: null, goalAdjustedRaw: null, inputsValid: false };
     }
     const computedRMR = calculateRMR(weight.kg, height.cm, age, gender);
     if (computedRMR == null) {
-      return { rmr: null, eer: null, goalAdjustedCalories: null, inputsValid: false };
+      return { rmr: null, eer: null, goalAdjustedCalories: null, eerRaw: null, goalAdjustedRaw: null, inputsValid: false };
     }
     const computedEER = calculateAdultEER({
       age,
@@ -131,22 +132,33 @@ export default function CalorieCalculator() {
       palCategory,
     });
     if (computedEER == null) {
-      return { rmr: null, eer: null, goalAdjustedCalories: null, inputsValid: false };
+      return { rmr: null, eer: null, goalAdjustedCalories: null, eerRaw: null, goalAdjustedRaw: null, inputsValid: false };
     }
+    // Goal adjustment and the macro example use the raw (full-precision) EER;
+    // only display/share values are rounded to whole kcal/day.
     const computedGoalAdjusted = calculateTargetCalories(computedEER, goal);
     if (computedGoalAdjusted == null) {
-      return { rmr: null, eer: null, goalAdjustedCalories: null, inputsValid: false };
+      return { rmr: null, eer: null, goalAdjustedCalories: null, eerRaw: null, goalAdjustedRaw: null, inputsValid: false };
     }
     return {
       rmr: round(computedRMR),
       eer: round(computedEER),
       goalAdjustedCalories: round(computedGoalAdjusted),
+      eerRaw: computedEER,
+      goalAdjustedRaw: computedGoalAdjusted,
       inputsValid: true,
     };
   }, [weight.kg, height.cm, age, gender, palCategory, goal]);
 
   const selectedPal = ADULT_PAL_CATEGORIES.find((p) => p.id === palCategory);
   const selectedGoal = CALORIE_GOALS.find((g) => g.value === goal);
+
+  // Illustrative Balanced 25/45/30 macro example derived from the raw
+  // (full-precision) goal-adjusted energy via the shared helper.
+  const macroExample = useMemo(() => {
+    if (!inputsValid || goalAdjustedRaw == null) return null;
+    return calculateMacros(goalAdjustedRaw, { protein: 25, carbs: 45, fat: 30 });
+  }, [inputsValid, goalAdjustedRaw]);
 
   // Sex coefficient explanation for Mifflin-St Jeor RMR equation
   const sexCoefficient = gender === "male" ? "+5" : "−161";
@@ -160,14 +172,28 @@ export default function CalorieCalculator() {
     return validateResultForPrivacy(
       {
         value: goalAdjustedCalories,
-        unit: "calories/day",
+        unit: "kcal/day",
         goal: selectedGoal?.label || "Maintain Weight",
+        goalAdjustment: goal,
         rmr,
         maintenanceEER: eer,
       },
       ["weight", "height", "age", "gender", "palCategory"],
     ); // Exclude sensitive input data
-  }, [goalAdjustedCalories, selectedGoal, rmr, eer, validateResultForPrivacy]);
+  }, [goalAdjustedCalories, selectedGoal, goal, rmr, eer, validateResultForPrivacy]);
+
+  // Supporting details rendered on both the preview and the exported PNG card.
+  // For maintenance the primary value already equals maintenance energy, so the
+  // duplicate maintenance line is omitted to avoid implying two measurements.
+  const shareDetails = useMemo(() => {
+    if (!shareResult) return [];
+    const details = [];
+    if (goal !== 0) {
+      details.push({ label: "Maintenance", value: `${shareResult.maintenanceEER} kcal/day` });
+    }
+    details.push({ label: "RMR", value: `${shareResult.rmr} kcal/day` });
+    return details;
+  }, [shareResult, goal]);
 
   const shareData = useMemo(() => {
     if (!shareResult) return null;
@@ -468,18 +494,24 @@ export default function CalorieCalculator() {
                 <p className="text-xs text-gray-500 dark:text-gray-400">
                   2023 DRI adult Estimated Energy Requirement at {selectedPal?.label.toLowerCase()} activity
                 </p>
+                <p className="mt-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                  Reference for the goal adjustment
+                </p>
               </div>
             </motion.div>
 
-            {/* Goal-Adjusted Estimate Result */}
+            {/* Goal-Adjusted Estimate Result (primary planning result) */}
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, delay: 0.6 }}
-              className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
+              className="rounded-xl bg-white p-6 shadow-lg ring-2 ring-purple-400 dark:bg-gray-800 dark:ring-purple-500"
             >
               <div className="text-center">
-                <h3 className="mb-4 text-lg font-semibold">Goal-Adjusted Estimate</h3>
+                <span className="inline-block rounded-full bg-purple-100 px-2 py-0.5 text-xs font-semibold text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
+                  Main planning result
+                </span>
+                <h3 className="mb-4 mt-2 text-lg font-semibold">Goal-Adjusted Estimate</h3>
                 <div className="mb-4">
                   <p className="text-4xl font-extrabold tracking-tight text-purple-600 dark:text-purple-400">
                     {goalAdjustedCalories}
@@ -489,7 +521,12 @@ export default function CalorieCalculator() {
                   </p>
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400">
-                  {selectedGoal?.description}
+                  {goal === 0
+                    ? "No adjustment — equals your maintenance estimate."
+                    : `${selectedGoal?.description} relative to maintenance.`}
+                </p>
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {selectedGoal?.label}
                 </p>
               </div>
             </motion.div>
@@ -547,16 +584,20 @@ export default function CalorieCalculator() {
         )}
 
         {/* Macronutrient Breakdown */}
-        {inputsValid && (
+        {inputsValid && macroExample && (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6, delay: 0.7 }}
             className="mt-8 rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
           >
-            <h3 className="mb-6 text-center text-lg font-semibold">
-              Illustrative Macronutrient Distribution
+            <h3 className="mb-2 text-center text-lg font-semibold">
+              Example Macronutrient Distribution
             </h3>
+            <p className="mb-6 text-center text-xs text-gray-500 dark:text-gray-400">
+              Illustrative Balanced split — Protein 25% / Carbohydrate 45% / Fat 30%.
+              An example, not a mandatory dietary distribution.
+            </p>
             <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
               {[
                 {
@@ -564,26 +605,26 @@ export default function CalorieCalculator() {
                   percentage: 25,
                   color: "text-red-600 dark:text-red-400",
                   bgColor: "bg-red-100 dark:bg-red-700/20",
-                  calories: round(goalAdjustedCalories * 0.25),
-                  grams: round((goalAdjustedCalories * 0.25) / 4),
+                  calories: macroExample.protein.calories,
+                  grams: macroExample.protein.grams,
                 },
                 {
                   name: "Carbohydrates",
                   percentage: 45,
                   color: "text-blue-600 dark:text-blue-400",
                   bgColor: "bg-blue-100 dark:bg-blue-700/20",
-                  calories: round(goalAdjustedCalories * 0.45),
-                  grams: round((goalAdjustedCalories * 0.45) / 4),
+                  calories: macroExample.carbs.calories,
+                  grams: macroExample.carbs.grams,
                 },
                 {
                   name: "Fats",
                   percentage: 30,
                   color: "text-yellow-600 dark:text-yellow-400",
                   bgColor: "bg-yellow-100 dark:bg-yellow-700/20",
-                  calories: round(goalAdjustedCalories * 0.3),
-                  grams: round((goalAdjustedCalories * 0.3) / 9),
+                  calories: macroExample.fat.calories,
+                  grams: macroExample.fat.grams,
                 },
-              ].map(({ name, percentage, color, bgColor, calories, grams }) => (
+              ].map(({ name, percentage, color, bgColor, calories: kcal, grams }) => (
                 <div
                   key={name}
                   className={`rounded-lg p-4 text-center ${bgColor}`}
@@ -591,7 +632,7 @@ export default function CalorieCalculator() {
                   <h4 className={`text-lg font-bold ${color}`}>{name}</h4>
                   <p className="mt-1 text-sm font-semibold">{percentage}%</p>
                   <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                    {calories} calories
+                    {kcal} calories
                   </p>
                   <p className="text-sm text-gray-600 dark:text-gray-400">
                     {grams}g per day
@@ -687,8 +728,9 @@ export default function CalorieCalculator() {
                 <ResultCard
                   type="calorie"
                   value={shareResult.value}
+                  unit={shareResult.unit}
                   category={shareResult.goal}
-                  subtitle={`RMR: ${shareResult.rmr} | Maintenance EER: ${shareResult.maintenanceEER} | Goal-Adjusted: ${shareResult.value}`}
+                  details={shareDetails}
                   aspectRatio="square"
                 />
               </div>
@@ -737,8 +779,9 @@ export default function CalorieCalculator() {
             ref={shareableCardRef}
             type="calorie"
             value={shareResult.value}
+            unit={shareResult.unit}
             category={shareResult.goal}
-            subtitle={`RMR: ${shareResult.rmr} | Maintenance EER: ${shareResult.maintenanceEER} | Goal-Adjusted: ${shareResult.value}`}
+            details={shareDetails}
           />
         </div>
       )}

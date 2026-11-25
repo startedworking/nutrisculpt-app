@@ -13,6 +13,8 @@ import CalculatorNextStep from "@/components/atoms/CalculatorNextStep";
 import {
   calculateAdultEER,
   calculateMacros,
+  isValidMacroDistribution,
+  distributeMeals,
   ADULT_PAL_CATEGORIES,
   ADULT_PAL_DESCRIPTION_NOTE,
   MACRO_PRESETS,
@@ -54,6 +56,9 @@ export default function MacroCalculator() {
     carbs: null,
     fat: null,
   });
+  // Display-only preference for the illustrative meal distribution (not a
+  // nutritional recommendation). Changing this never alters daily totals.
+  const [mealCount, setMealCount] = useState(3);
 
   // Store both metric and imperial values; null = blank / not provided.
   const [weight, setWeight] = useState({ kg: null, lb: null });
@@ -104,9 +109,10 @@ export default function MacroCalculator() {
   };
 
   // Calculate calories using the 2023 DRI adult EER equation (age 19+).
-  // Returns null until every required input is valid; never lets NaN/Infinity
-  // reach rendering.
-  const calculatedCalories = useMemo(() => {
+  // Returns the raw (full-precision) EER, or null until every required input is
+  // valid. The raw value feeds calculateMacros so Transformation and this page
+  // agree; the rounded display value is derived separately.
+  const calculatedEER = useMemo(() => {
     if (
       weight.kg == null ||
       height.cm == null ||
@@ -124,8 +130,12 @@ export default function MacroCalculator() {
       palCategory,
     });
     if (computedEER == null) return null;
-    return round(computedEER);
+    return computedEER;
   }, [weight.kg, height.cm, age, gender, palCategory]);
+
+  // Whole-kcal display value for the calculated maintenance energy.
+  const calculatedCalories =
+    calculatedEER != null ? round(calculatedEER) : null;
 
   // Get current macro percentages
   const currentMacros = useMemo(() => {
@@ -141,6 +151,28 @@ export default function MacroCalculator() {
     currentMacros.fat == null
       ? null
       : currentMacros.protein + currentMacros.carbs + currentMacros.fat;
+
+  // A custom split is valid only when all three percentages are present, each
+  // finite and within 0–100, and the total is 100% (decimal-tolerant). Presets
+  // are always valid distributions.
+  const distributionValid =
+    selectedPreset === "Custom"
+      ? isValidMacroDistribution(customMacros)
+      : true;
+
+  // Understandable message for an invalid custom distribution. No results,
+  // meal distribution or share card are produced while this is shown.
+  const customValidationMessage = (() => {
+    if (selectedPreset !== "Custom" || distributionValid) return null;
+    const { protein, carbs, fat } = customMacros;
+    if (protein == null || carbs == null || fat == null) {
+      return "Enter all three percentages to see your macro breakdown.";
+    }
+    if ([protein, carbs, fat].some((p) => !Number.isFinite(p) || p < 0 || p > 100)) {
+      return "Each percentage must be between 0 and 100.";
+    }
+    return `Total: ${totalPercentage}% — percentages must add up to 100%.`;
+  })();
 
   // Adult AMDR (age 19+) status for the current macro split
   const adultAmdr = useMemo(() => {
@@ -158,35 +190,54 @@ export default function MacroCalculator() {
     });
   }, [currentMacros]);
 
-  // Calculate macro breakdown using verified helper. Null when inputs invalid.
+  // Calculate macro breakdown using the shared helper. The full-precision EER
+  // (not a rounded value) is the calculation input, matching Transformation.
+  // Null when inputs are invalid or a custom distribution is invalid, so no
+  // misleading or stale result is rendered.
   const macroBreakdown = useMemo(() => {
-    const totalCalories = useCalculatedCalories ? calculatedCalories : calories;
+    const totalCalories = useCalculatedCalories ? calculatedEER : calories;
     if (totalCalories == null) return null;
     if (selectedPreset === "Custom") {
-      if (
-        customMacros.protein == null ||
-        customMacros.carbs == null ||
-        customMacros.fat == null
-      ) {
-        return null;
-      }
+      if (!distributionValid) return null;
       return calculateMacros(totalCalories, customMacros);
     }
     const preset = MACRO_PRESETS.find(preset => preset.name === selectedPreset);
     if (!preset) return null;
     return calculateMacros(totalCalories, preset);
-  }, [calculatedCalories, calories, useCalculatedCalories, customMacros, selectedPreset]);
+  }, [calculatedEER, calories, useCalculatedCalories, customMacros, selectedPreset, distributionValid]);
 
-  // Fitness protein context (grams per kg body weight)
-  const proteinPerKg = useMemo(() => {
-    if (!macroBreakdown || weight.kg == null) return null;
-    return round(macroBreakdown.protein.grams / weight.kg, 1);
+  // Fitness protein context (grams per kg body weight). Classification uses the
+  // unrounded ratio so a raw value below 1.4 is not misclassified as "within"
+  // merely because it displays as 1.4 (and likewise at the 2.0 boundary).
+  const proteinPerKgRaw = useMemo(() => {
+    if (!macroBreakdown || weight.kg == null || weight.kg <= 0) return null;
+    return macroBreakdown.protein.grams / weight.kg;
   }, [macroBreakdown, weight.kg]);
 
+  const proteinPerKgDisplay =
+    proteinPerKgRaw != null ? round(proteinPerKgRaw, 1) : null;
+
   const fitnessProteinContext = useMemo(() => {
-    if (proteinPerKg == null) return null;
-    return evaluateFitnessProtein(proteinPerKg);
-  }, [proteinPerKg]);
+    if (proteinPerKgRaw == null) return null;
+    return evaluateFitnessProtein(proteinPerKgRaw);
+  }, [proteinPerKgRaw]);
+
+  // Concise wording that stays accurate even when display rounding lands on a
+  // reference boundary (e.g. raw 1.35 displays as 1.4 but is still below).
+  const proteinContextText = (() => {
+    if (fitnessProteinContext == null) return null;
+    if (fitnessProteinContext === "below") {
+      return proteinPerKgDisplay === 1.4
+        ? "just below the commonly cited fitness reference range (1.4–2.0 g/kg)"
+        : "below the commonly cited fitness reference range";
+    }
+    if (fitnessProteinContext === "above") {
+      return proteinPerKgDisplay === 2.0
+        ? "just above the commonly cited fitness reference range (1.4–2.0 g/kg)"
+        : "above the commonly cited fitness reference range";
+    }
+    return "within the commonly cited fitness reference range";
+  })();
 
   const handleMacroChange = (macro, value) => {
     setCustomMacros(prev => ({
@@ -197,7 +248,7 @@ export default function MacroCalculator() {
 
   // Prepare share data for macro results
   const shareResult = useMemo(() => {
-    if (!macroBreakdown || totalPercentage !== 100) return null;
+    if (!macroBreakdown || !distributionValid) return null;
 
     return validateResultForPrivacy({
       protein: macroBreakdown.protein.grams,
@@ -206,7 +257,7 @@ export default function MacroCalculator() {
       totalCalories: useCalculatedCalories ? calculatedCalories : calories,
       preset: selectedPreset !== 'Custom' ? selectedPreset : 'Custom Split'
     }, ['weight', 'height', 'age', 'gender', 'activityLevel']); // Exclude sensitive input data
-  }, [macroBreakdown, totalPercentage, useCalculatedCalories, calculatedCalories, calories, selectedPreset, validateResultForPrivacy]);
+  }, [macroBreakdown, distributionValid, useCalculatedCalories, calculatedCalories, calories, selectedPreset, validateResultForPrivacy]);
 
   const shareData = useMemo(() => {
     if (!shareResult) return null;
@@ -226,6 +277,26 @@ export default function MacroCalculator() {
     macroBreakdown ? macroBreakdown[macro].percentage : "—";
   const barWidth = (macro) =>
     macroBreakdown ? macroBreakdown[macro].percentage : 0;
+
+  // Illustrative meal distribution. Whole-gram totals reconcile exactly with
+  // the displayed daily totals via the shared distributeMeals helper. Changing
+  // the meal count affects only this section, never daily totals.
+  const mealPlan = useMemo(() => {
+    if (!macroBreakdown) return null;
+    const protein = distributeMeals(macroBreakdown.protein.grams, mealCount);
+    const carbs = distributeMeals(macroBreakdown.carbs.grams, mealCount);
+    const fat = distributeMeals(macroBreakdown.fat.grams, mealCount);
+    const totalCalories = useCalculatedCalories ? calculatedCalories : calories;
+    const kcal =
+      totalCalories != null ? distributeMeals(totalCalories, mealCount) : null;
+    if (!protein || !carbs || !fat) return null;
+    return { protein, carbs, fat, kcal };
+  }, [macroBreakdown, mealCount, useCalculatedCalories, calculatedCalories, calories]);
+
+  const mealLabels =
+    mealCount === 3
+      ? ["Breakfast", "Lunch", "Dinner"]
+      : Array.from({ length: mealCount }, (_, i) => `Meal ${i + 1}`);
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-10 sm:px-6 lg:px-8">
@@ -466,6 +537,7 @@ export default function MacroCalculator() {
                   {preset.name} ({preset.protein}% / {preset.carbs}% / {preset.fat}%)
                 </option>
               ))}
+              <option value="Custom">Custom (user-defined)</option>
             </select>
           </div>
 
@@ -531,10 +603,10 @@ export default function MacroCalculator() {
             </div>
           )}
 
-          {selectedPreset === "Custom" && totalPercentage !== null && totalPercentage !== 100 && (
+          {customValidationMessage && (
             <div className="mt-4 rounded-lg bg-amber-100 p-3 text-center dark:bg-amber-900/30">
               <p className="text-sm text-amber-800 dark:text-amber-200">
-                Total: {totalPercentage}% (should equal 100%)
+                {customValidationMessage}
               </p>
             </div>
           )}
@@ -577,15 +649,10 @@ export default function MacroCalculator() {
                   style={{ width: `${barWidth("protein")}%` }}
                 ></div>
               </div>
-              {proteinPerKg != null && (
+              {proteinPerKgDisplay != null && (
                 <p className="mt-3 text-xs text-gray-500 dark:text-gray-400 text-center">
-                  ≈ {proteinPerKg} g per kg body weight —{" "}
-                  {fitnessProteinContext === "below"
-                    ? "below the commonly cited fitness reference range"
-                    : fitnessProteinContext === "within"
-                      ? "within the commonly cited fitness reference range"
-                      : "above the commonly cited fitness reference range"}
-                  </p>
+                  ≈ {proteinPerKgDisplay} g per kg body weight — {proteinContextText}
+                </p>
               )}
             </div>
           </motion.div>
@@ -722,49 +789,79 @@ export default function MacroCalculator() {
       )}
 
       {/* Meal Distribution */}
-      {macroBreakdown && (
+      {macroBreakdown && mealPlan && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, delay: 0.7 }}
           className="mt-8 rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
         >
-          <h3 className="mb-6 text-center text-lg font-semibold">
-            Daily Meal Distribution (Example: 3 Meals)
+          <h3 className="mb-2 text-center text-lg font-semibold">
+            Daily Meal Distribution (Example)
           </h3>
+          <p className="mb-4 text-center text-xs text-gray-500 dark:text-gray-400">
+            An example of dividing your daily macros across meals — not a recommendation.
+          </p>
+
+          <div className="mb-6 flex justify-center">
+            <label className="flex items-center gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <span>Meals per day</span>
+              <select
+                value={mealCount}
+                onChange={(e) => setMealCount(parseInt(e.target.value, 10))}
+                className="rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              >
+                {[2, 3, 4, 5, 6].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
           <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-            {["Breakfast", "Lunch", "Dinner"].map((meal) => (
+            {mealLabels.map((meal, i) => (
               <div key={meal} className="rounded-lg bg-gray-50 p-4 dark:bg-gray-700/50">
                 <h4 className="mb-3 text-center font-semibold">{meal}</h4>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
                     <span>Protein:</span>
                     <span className="font-medium text-red-600 dark:text-red-400">
-                      {round(macroBreakdown.protein.grams / 3)}g
+                      {mealPlan.protein[i]}g
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Carbs:</span>
                     <span className="font-medium text-blue-600 dark:text-blue-400">
-                      {round(macroBreakdown.carbs.grams / 3)}g
+                      {mealPlan.carbs[i]}g
                     </span>
                   </div>
                   <div className="flex justify-between">
                     <span>Fat:</span>
                     <span className="font-medium text-yellow-600 dark:text-yellow-400">
-                      {round(macroBreakdown.fat.grams / 3)}g
+                      {mealPlan.fat[i]}g
                     </span>
                   </div>
-                  <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600">
-                    <div className="flex justify-between font-semibold">
-                      <span>Calories:</span>
-                      <span>{round((useCalculatedCalories ? calculatedCalories : calories) / 3)}</span>
+                  {mealPlan.kcal && (
+                    <div className="mt-2 pt-2 border-t border-gray-300 dark:border-gray-600">
+                      <div className="flex justify-between font-semibold">
+                        <span>Calories:</span>
+                        <span>≈ {mealPlan.kcal[i]}</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </div>
             ))}
           </div>
+
+          <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
+            This is an example of dividing your daily macro distribution across
+            meals. Meal frequency and distribution can be adjusted to suit
+            individual preferences, training and daily routines. Calorie figures
+            are approximate.
+          </p>
         </motion.div>
       )}
 
@@ -781,32 +878,32 @@ export default function MacroCalculator() {
         <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-2">
             <h4 className="font-medium text-red-600 dark:text-red-400">
-              Protein Sources:
+              Protein-containing foods:
             </h4>
             <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-              <li>• Lean meats, fish, eggs</li>
-              <li>• Greek yogurt, cottage cheese</li>
-              <li>• Legumes, quinoa</li>
+              <li>• Eggs, fish and lean meats</li>
+              <li>• Yogurt, cottage cheese and paneer</li>
+              <li>• Tofu, soy products and beans/lentils</li>
             </ul>
           </div>
           <div className="space-y-2">
             <h4 className="font-medium text-blue-600 dark:text-blue-400">
-              Carbohydrate Sources:
+              Carbohydrate-containing foods:
             </h4>
             <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-              <li>• Whole grains, oats</li>
-              <li>• Fruits, vegetables</li>
-              <li>• Sweet potatoes, rice</li>
+              <li>• Oats, whole grains, rice and quinoa</li>
+              <li>• Fruits and vegetables</li>
+              <li>• Potatoes and sweet potatoes</li>
             </ul>
           </div>
           <div className="space-y-2">
             <h4 className="font-medium text-yellow-600 dark:text-yellow-400">
-              Healthy Fat Sources:
+              Unsaturated-fat sources:
             </h4>
             <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-              <li>• Avocados, nuts, seeds</li>
-              <li>• Olive oil, fatty fish</li>
-              <li>• Coconut, nut butters</li>
+              <li>• Nuts and seeds</li>
+              <li>• Olive oil and other unsaturated vegetable oils</li>
+              <li>• Avocados and oily fish</li>
             </ul>
           </div>
         </div>
