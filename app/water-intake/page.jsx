@@ -356,7 +356,7 @@ export default function WaterIntakeCalculator() {
             </h3>
             <p className="text-sm text-gray-600 dark:text-gray-400">
               {Number.isFinite(age)
-                ? "This calculator provides adult reference values. Children and adolescents have different hydration needs, and adult weight-based rules should not be applied to them. Please consult a healthcare professional for age-appropriate guidance."
+                ? "This page currently provides adult total-water reference values for ages 19 and older. Children and adolescents use different age-specific reference values."
                 : "Enter your age to see the adult hydration reference."}
             </p>
           </div>
@@ -389,6 +389,12 @@ export default function WaterIntakeCalculator() {
                 Because a heart or kidney condition is selected, a general hydration estimate may
                 not be safe to use. Follow your healthcare provider&apos;s prescribed fluid
                 allowance.
+              </p>
+            </div>
+          ) : !reference || !referenceUnits ? (
+            <div className="mt-8 rounded-xl bg-gray-50 p-8 text-center dark:bg-gray-800/50">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Select a sex to see the adult total-water reference.
               </p>
             </div>
           ) : (

@@ -251,6 +251,51 @@ test("all ideal weight formulas return separate reference estimates", () => {
   assert.ok(!all.average);
 });
 
+test("calculateAllIdealWeights blank sex → BMI reference only, no historical values", () => {
+  const all = calculateAllIdealWeights({ heightCm: 170, gender: "" });
+  assert.ok(Number.isFinite(all.bmi.kg));
+  assert.equal(all.devine, undefined);
+  assert.equal(all.robinson, undefined);
+  assert.equal(all.miller, undefined);
+  assert.equal(all.hamwi, undefined);
+});
+
+test("calculateAllIdealWeights invalid sex → BMI reference only, no historical values", () => {
+  const all = calculateAllIdealWeights({ heightCm: 170, gender: "other" });
+  assert.ok(Number.isFinite(all.bmi.kg));
+  assert.equal(all.devine, undefined);
+  assert.equal(all.robinson, undefined);
+  assert.equal(all.miller, undefined);
+  assert.equal(all.hamwi, undefined);
+});
+
+test("calculateAllIdealWeights null sex → BMI reference only, no historical values", () => {
+  const all = calculateAllIdealWeights({ heightCm: 170, gender: null });
+  assert.ok(Number.isFinite(all.bmi.kg));
+  assert.equal(all.devine, undefined);
+  assert.equal(all.robinson, undefined);
+  assert.equal(all.miller, undefined);
+  assert.equal(all.hamwi, undefined);
+});
+
+test("calculateAllIdealWeights male → BMI reference plus male historical formulas", () => {
+  const all = calculateAllIdealWeights({ heightCm: 170, gender: "male" });
+  assert.ok(Number.isFinite(all.bmi.kg));
+  assert.ok(Number.isFinite(all.devine.kg));
+  assert.ok(Number.isFinite(all.robinson.kg));
+  assert.ok(Number.isFinite(all.miller.kg));
+  assert.ok(Number.isFinite(all.hamwi.kg));
+});
+
+test("calculateAllIdealWeights female → BMI reference plus female historical formulas", () => {
+  const all = calculateAllIdealWeights({ heightCm: 170, gender: "female" });
+  assert.ok(Number.isFinite(all.bmi.kg));
+  assert.ok(Number.isFinite(all.devine.kg));
+  const male = calculateAllIdealWeights({ heightCm: 170, gender: "male" });
+  // Female Devine constant is lower than male Devine constant
+  assert.ok(all.devine.kg < male.devine.kg);
+});
+
 test("frame adjustment does not change ideal weight", () => {
   const base = calculateIdealWeight({ heightCm: 170, gender: "male", formulaId: "devine" });
   // Frame adjustment removed: all frames produce the same result

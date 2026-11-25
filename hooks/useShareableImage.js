@@ -64,6 +64,14 @@ export const useShareableImage = (calculatorType) => {
     const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
     const calculatorPath = `/${calculatorType}`;
     
+    // Explicit calculator title mapping. Keeps route compatibility (/ideal-weight
+    // is not renamed) while never exposing legacy route terminology in shares.
+    const CALCULATOR_TITLES = {
+      'ideal-weight': 'NutriSculpt Reference Weight Result',
+      'water-intake': 'NutriSculpt Water Intake Result',
+    };
+    const defaultTitle = `NutriSculpt ${calculatorType.charAt(0).toUpperCase() + calculatorType.slice(1)} Calculator Result`;
+
     // Build UTM tracking URL
     const utmParams = new URLSearchParams({
       utm_source: 'share',
@@ -83,7 +91,7 @@ export const useShareableImage = (calculatorType) => {
           shareText = `My BMI is ${result.value} (${result.category}). Explore yours with NutriSculpt!`;
           break;
         case 'calories':
-          shareText = `My estimated daily calorie target is ${result.value} calories. Explore your estimated daily calorie needs with NutriSculpt!`;
+          shareText = `My goal-adjusted calorie estimate is ${result.value} calories. Explore your goal-adjusted calorie needs with NutriSculpt!`;
           break;
         case 'macros':
           shareText = `My macro split: ${result.protein}g protein, ${result.carbs}g carbs, ${result.fat}g fat. Explore your own with NutriSculpt!`;
@@ -95,7 +103,7 @@ export const useShareableImage = (calculatorType) => {
           shareText = `Explore an estimated maximum heart rate and training guidance with NutriSculpt!`;
           break;
         case 'ideal-weight':
-          shareText = `Explore a weight-for-height reference: ${result.value}${result.unit}. Learn more with NutriSculpt!`;
+          shareText = `Explore a weight-for-height reference: ${result.value} ${result.unit}. Learn more with NutriSculpt!`;
           break;
         case 'water-intake':
           shareText = `General hydration reference: ${result.value} L/day total water (all beverages and food). Explore hydration guidance with NutriSculpt!`;
@@ -106,7 +114,7 @@ export const useShareableImage = (calculatorType) => {
     }
 
     return {
-      title: `NutriSculpt ${calculatorType.charAt(0).toUpperCase() + calculatorType.slice(1)} Calculator Result`,
+      title: CALCULATOR_TITLES[calculatorType] || defaultTitle,
       text: shareText,
       url: shareUrl
     };

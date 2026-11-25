@@ -87,7 +87,10 @@ export default function OneRMCalculator() {
     [repsValid, reps]
   );
 
-  // Primary estimate: Brzycki. The other six equations remain available as
+  // Primary estimate: Brzycki. The internal primary value retains full
+  // precision so downstream calculations (training loads) are not rounded
+  // prematurely. Display and share values are rounded to whole units only at
+  // the presentation boundary. The other six equations remain available as
   // educational comparison; the unweighted average is not a validated method
   // and is no longer presented as the recommended value.
   const oneRMResults = useMemo(() => {
@@ -97,9 +100,9 @@ export default function OneRMCalculator() {
     const primaryValue = estimateOneRM(weightKg, reps, PRIMARY_ONE_RM_ID);
     if (!all || primaryValue === null) return null;
 
-    const format = (value) => ({
-      kg: round(value, 1),
-      lb: round(kgToLb(value), 1),
+    const toUnitPair = (value) => ({
+      kg: round(value, 0),
+      lb: round(kgToLb(value), 0),
     });
 
     const equations = {};
@@ -107,7 +110,7 @@ export default function OneRMCalculator() {
       const value = all[formula.id];
       if (value !== undefined) {
         equations[formula.id] = {
-          ...format(value),
+          ...toUnitPair(value),
           name: formula.name,
           note: formula.note,
         };
@@ -121,20 +124,23 @@ export default function OneRMCalculator() {
         : null;
 
     return {
-      primary: { ...format(primaryValue), method: PRIMARY_ONE_RM_ID },
-      equations,
+      // Raw full-precision primary value; training calculations use this.
+      primary: { value: primaryValue, method: PRIMARY_ONE_RM_ID },
+      equations: equations,
       spread: spread
-        ? { min: format(spread.min), max: format(spread.max) }
+        ? { min: toUnitPair(spread.min), max: toUnitPair(spread.max) }
         : null,
     };
   }, [inputsValid, weightKg, reps]);
 
-  // Calculate training weights based on the primary estimate.
+  // Calculate training weights based on the unrounded primary prediction.
+  // Display precision for training loads may remain at one decimal, but the
+  // load itself derives from the raw primary value.
   const trainingWeights = useMemo(() => {
     if (!oneRMResults) return [];
 
     return TRAINING_PERCENTAGES.map(({ percentage, reps: repRange, purpose, color }) => {
-      const weightKgAtLoad = (oneRMResults.primary.kg * percentage) / 100;
+      const weightKgAtLoad = (oneRMResults.primary.value * percentage) / 100;
       return {
         percentage,
         reps: repRange,
@@ -152,8 +158,9 @@ export default function OneRMCalculator() {
   const shareResult = useMemo(() => {
     if (!oneRMResults) return null;
 
+    const primaryValue = oneRMResults.primary.value;
     return validateResultForPrivacy({
-      value: oneRMResults.primary[unitSystem === 'metric' ? 'kg' : 'lb'],
+      value: round(primaryValue, 0),
       unit: unitSystem === 'metric' ? 'kg' : 'lb',
       exercise: exercise,
       repsUsed: reps,
@@ -296,7 +303,9 @@ export default function OneRMCalculator() {
             <div className="mb-6 rounded-lg bg-gradient-to-r from-blue-100 to-purple-100 p-6 text-center dark:from-blue-900/30 dark:to-purple-900/30">
               <h4 className="mb-2 text-lg font-semibold">Primary Estimate (Brzycki)</h4>
               <p className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-400">
-                {unitSystem === "metric" ? oneRMResults.primary.kg : oneRMResults.primary.lb}
+                {unitSystem === "metric"
+                  ? round(oneRMResults.primary.value, 0)
+                  : round(kgToLb(oneRMResults.primary.value), 0)}
                 <span className="text-lg font-normal ml-1">
                   {unitSystem === "metric" ? "kg" : "lbs"}
                 </span>
@@ -366,7 +375,9 @@ export default function OneRMCalculator() {
                 an estimate of the maximum weight you could lift once for {exercise} with proper
                 form. The primary estimate uses the <span className="font-semibold">Brzycki</span>{" "}
                 equation applied to the weight you lifted (
-                {unitSystem === "metric" ? oneRMResults.primary.kg : oneRMResults.primary.lb}{" "}
+                {unitSystem === "metric"
+                  ? round(oneRMResults.primary.value, 0)
+                  : round(kgToLb(oneRMResults.primary.value), 0)}{" "}
                 {unitSystem === "metric" ? "kg" : "lbs"}) and the{" "}
                 <span className="font-semibold">{reps} repetitions</span> performed. The other six
                 equations are shown for comparison only.

@@ -322,10 +322,10 @@ export default function HeartRateZoneCalculator() {
         <div className="mt-6">
           <div className="rounded-lg bg-amber-50 p-4 text-sm text-amber-900 ring-1 ring-inset ring-amber-200 dark:bg-amber-950/40 dark:text-amber-200 dark:ring-amber-900/40">
             <p>
-              <strong>Note:</strong> For most accurate results, consider a
-              professional fitness test to determine your actual maximum heart
-              rate. Age-predicted formulas are estimates and individual
-              variation is common.
+              <strong>Note:</strong> A properly conducted exercise test can
+              provide a measured maximum heart rate. Age-predicted equations
+              are estimates and may differ substantially from an individual&apos;s
+              measured value.
             </p>
           </div>
         </div>
@@ -575,7 +575,7 @@ export default function HeartRateZoneCalculator() {
               Getting Started:
             </h4>
             <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-              <li>• Use a heart rate monitor for accuracy</li>
+              <li>• A reliable heart-rate monitor can help track heart rate during exercise, but it does not make an age-predicted HRmax equation more accurate.</li>
               <li>• Start with lower zones and progress</li>
               <li>• Allow time for adaptation</li>
             </ul>

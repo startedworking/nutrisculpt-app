@@ -245,10 +245,6 @@ function TransformationForm() {
       newErrors.gender = "Please select the equation input needed for this estimate.";
     }
 
-    if (!form.activity) {
-      newErrors.activity = "Please select your general activity level.";
-    }
-
     const weightKg = canonical.weightKg;
     if (weightKg == null) {
       newErrors.weight = unitSystem === "metric"
@@ -301,7 +297,7 @@ function TransformationForm() {
       }
     }
 
-    if (!ADULT_PAL_CATEGORIES.includes(form.palCategory)) {
+    if (!ADULT_PAL_CATEGORIES.some((c) => c.id === form.palCategory)) {
       newErrors.palCategory = "Please select your physical activity category.";
     }
 
@@ -393,7 +389,7 @@ function TransformationForm() {
   const idealWeightMin = h > 0 ? 18.5 * h * h : 0;
   const idealWeightMax = h > 0 ? 24.9 * h * h : 0;
   const hasGender = form.gender === "male" || form.gender === "female";
-  const hasValidPal = ADULT_PAL_CATEGORIES.includes(form.palCategory);
+  const hasValidPal = ADULT_PAL_CATEGORIES.some((c) => c.id === form.palCategory);
 
   // Maintenance energy via the shared 2023 DRI adult Estimated Energy
   // Requirement (EER). Transformation requires age >= 20, so adult EER applies.
@@ -509,7 +505,7 @@ function TransformationForm() {
     if (bmi >= 35) return { category: null, bmiNote: true };
     if (waistToHeightRatioRaw >= 0.60) return { category: "High central adiposity" };
     if (waistToHeightRatioRaw >= 0.50) return { category: "Increased central adiposity" };
-    if (waistToHeightRatioRaw >= 0.40) return { category: "Lower central-adiposity category" };
+    if (waistToHeightRatioRaw >= 0.40) return { category: "Healthy central adiposity" };
     return { category: null, note: "Below the commonly referenced 0.40 central-adiposity reference point." };
   };
 
@@ -1040,7 +1036,7 @@ function TransformationForm() {
                   </p>
                 </div>
                 <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                  General guidance: muscle-strengthening activities on &gt;&gt;2 days/week. Frequency alone doesn&apos;t guarantee all guideline requirements.
+                  General guidance: muscle-strengthening activities on at least 2 days per week. Frequency alone doesn&apos;t guarantee all guideline requirements.
                 </p>
               </div>
             </div>
@@ -1161,10 +1157,9 @@ function TransformationForm() {
                 <>
                   <strong>Body Measurements:</strong> BMI and weight-for-height are population-level screening references, not individualized targets. 
                   They do not account for body composition, muscle mass, bone density, or individual health status. 
-                  Adult references are not appropriate for children/adolescents, pregnant/postpartum individuals, older adults with sarcopenia/frailty,
-                  athletes with high muscle mass, or conditions affecting fluid balance. BMI and weight-for-height references may be less informative in older adults
-                  with sarcopenia or frailty; interpret alongside functional and clinical context. Waist-to-height ratio: NICE guidance (ratio &gt;=0.5) applies to adults
-                  with BMI &lt;35; it is not a diagnosis of cardiovascular disease or diabetes.
+                  They apply to adults; children/adolescents and pregnant/postpartum individuals use separate references.
+                  BMI and weight-for-height references may be less informative in older adults with sarcopenia, frailty or altered body composition and should be interpreted alongside functional and clinical context.
+                  Waist-to-height ratio: NICE guidance (ratio &gt;=0.5) applies to adults with BMI &lt;35; it is not a diagnosis of cardiovascular disease or diabetes.
                   <br /><br />
                   <strong>Physical Activity:</strong> Comparisons use approximate duration ranges and broad intensity categories.
                   Exact moderate-equivalent minutes are not calculated when intensity breakdown is unavailable.

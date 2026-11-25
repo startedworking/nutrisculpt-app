@@ -106,8 +106,10 @@ export default function BmiCalculator() {
 
   const isAdult = Number.isFinite(age) && age >= 20;
 
-  // Prepare share data for BMI results
+  // Prepare share data for BMI results. Adult share requires age >= 20 so
+  // that youth BMI (which exists internally) never leaks into adult sharing.
   const shareResult = useMemo(() => {
+    if (!isAdult) return null;
     if (!isFinite(bmi) || bmi <= 0) return null;
 
     return validateResultForPrivacy({
@@ -117,7 +119,7 @@ export default function BmiCalculator() {
         ? `${healthyRange.min[unitSystem === 'metric' ? 'kg' : 'lb']} - ${healthyRange.max[unitSystem === 'metric' ? 'kg' : 'lb']} ${unitSystem === 'metric' ? 'kg' : 'lbs'}`
         : "—",
     }, ['weight', 'height']); // Exclude sensitive input data
-  }, [bmi, label, healthyRange, unitSystem, validateResultForPrivacy]);
+  }, [bmi, label, healthyRange, unitSystem, isAdult, validateResultForPrivacy]);
 
   const shareData = useMemo(() => {
     if (!shareResult) return null;

@@ -124,10 +124,10 @@ export default function IdealWeightCalculator() {
   // Prepare share data for ideal weight results
   const shareResult = useMemo(() => {
     if (!referenceWeight || !healthyRange) return null;
-    
+
     const rangeValue = unitSystem === 'metric'
-      ? `${healthyRange.min.kg}-${healthyRange.max.kg} kg`
-      : `${healthyRange.min.lb}-${healthyRange.max.lb} lbs`;
+      ? `${healthyRange.min.kg}-${healthyRange.max.kg}`
+      : `${healthyRange.min.lb}-${healthyRange.max.lb}`;
 
     return validateResultForPrivacy({
       value: rangeValue,
@@ -500,6 +500,7 @@ export default function IdealWeightCalculator() {
               <ResultCard
                 type="idealWeight"
                 value={shareResult.value}
+                unit={shareResult.unit}
                 category="Weight-for-height reference"
                 subtitle={shareResult.referencePoint
                   ? `Middle reference (BMI 22): ${shareResult.referencePoint} ${shareResult.unit}`
@@ -551,6 +552,7 @@ export default function IdealWeightCalculator() {
             ref={shareableCardRef}
             type="idealWeight"
             value={shareResult.value}
+            unit={shareResult.unit}
             category="Weight-for-height reference"
             subtitle={shareResult.referencePoint
               ? `Middle reference (BMI 22): ${shareResult.referencePoint} ${shareResult.unit}`
