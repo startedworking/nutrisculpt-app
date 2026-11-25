@@ -387,7 +387,9 @@ function TransformationForm() {
   const h = heightCm ? heightCm / 100 : 0;
   const bmi = heightCm && weightKg ? weightKg / (h * h) : 0;
   const idealWeightMin = h > 0 ? 18.5 * h * h : 0;
-  const idealWeightMax = h > 0 ? 24.9 * h * h : 0;
+  // Adult healthy BMI interval is 18.5 ≤ BMI < 25 (upper bound exclusive),
+  // matching the shared bmiHealthyRange() helper.
+  const idealWeightMax = h > 0 ? 25 * h * h : 0;
   const hasGender = form.gender === "male" || form.gender === "female";
   const hasValidPal = ADULT_PAL_CATEGORIES.some((c) => c.id === form.palCategory);
 

@@ -15,6 +15,7 @@ import {
   calculateMacros,
   isValidMacroDistribution,
   distributeMeals,
+  fitnessProteinGramsPerKg,
   ADULT_PAL_CATEGORIES,
   ADULT_PAL_DESCRIPTION_NOTE,
   MACRO_PRESETS,
@@ -209,10 +210,20 @@ export default function MacroCalculator() {
   // Fitness protein context (grams per kg body weight). Classification uses the
   // unrounded ratio so a raw value below 1.4 is not misclassified as "within"
   // merely because it displays as 1.4 (and likewise at the 2.0 boundary).
+  // The numerator is the unrounded protein grams (raw calories × pct / 100 / 4),
+  // not the already-rounded gram display value. In manual calorie mode the
+  // protein g/kg context is hidden entirely so a previously entered (hidden)
+  // body weight is never silently used.
   const proteinPerKgRaw = useMemo(() => {
-    if (!macroBreakdown || weight.kg == null || weight.kg <= 0) return null;
-    return macroBreakdown.protein.grams / weight.kg;
-  }, [macroBreakdown, weight.kg]);
+    if (!useCalculatedCalories) return null;
+    if (weight.kg == null || weight.kg <= 0) return null;
+    if (calculatedEER == null || macroBreakdown == null) return null;
+    return fitnessProteinGramsPerKg(
+      calculatedEER,
+      macroBreakdown.protein.percentage,
+      weight.kg
+    );
+  }, [macroBreakdown, weight.kg, useCalculatedCalories, calculatedEER]);
 
   const proteinPerKgDisplay =
     proteinPerKgRaw != null ? round(proteinPerKgRaw, 1) : null;

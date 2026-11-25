@@ -97,7 +97,7 @@ export const useShareableImage = (calculatorType) => {
           shareText = `My macro split: ${result.protein}g protein, ${result.carbs}g carbs, ${result.fat}g fat. Explore your own with NutriSculpt!`;
           break;
         case 'one-rm':
-          shareText = `My estimated 1RM is ${result.value} ${result.unit} (Brzycki estimate from ${result.repsUsed} reps). Explore your strength estimate with NutriSculpt!`;
+          shareText = `My estimated 1RM${result.exercise ? ` for ${result.exercise}` : ''} is ${result.value} ${result.unit} (Brzycki estimate from ${result.repsUsed} reps). Explore your strength estimate with NutriSculpt!`;
           break;
         case 'heart-rate':
           shareText = `Explore an estimated maximum heart rate and training guidance with NutriSculpt!`;

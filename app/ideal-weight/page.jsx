@@ -14,6 +14,7 @@ import {
   calculateIdealWeight,
   calculateAllIdealWeights,
   idealWeightHealthyRange,
+  historicalFormulasApplicable,
   parseFiniteNumber,
   kgToLb,
 } from "@/lib/calculators";
@@ -23,6 +24,9 @@ const round = (value, digits = 1) => {
   const p = Math.pow(10, digits);
   return Math.round(value * p) / p;
 };
+
+// Consistent one-decimal display (keeps trailing zeros) for weight values.
+const fmt1 = (value) => (value == null ? "" : round(value, 1).toFixed(1));
 
 // Conversion utilities
 const conversions = {
@@ -68,15 +72,21 @@ export default function IdealWeightCalculator() {
       const ftIn = conversions.cmToFtIn(parsed);
       setHeight({ cm: parsed, ft: ftIn.ft, in: ftIn.in });
     } else if (unit === "ft") {
-      if (height.in == null) {
-        setHeight({ cm: null, ft: parsed, in: null });
+      // Feet must be a whole number; inches (if present) must be 0–<12.
+      const ftValid = Number.isInteger(parsed) && parsed >= 0;
+      const inValid = height.in == null || (height.in >= 0 && height.in < 12);
+      if (!ftValid || !inValid) {
+        setHeight({ cm: null, ft: parsed, in: height.in });
         return;
       }
       const cm = conversions.ftInToCm(parsed, height.in);
       setHeight({ cm, ft: parsed, in: height.in });
     } else if (unit === "in") {
-      if (height.ft == null) {
-        setHeight({ cm: null, ft: null, in: parsed });
+      // Inches must be at least 0 and below 12; feet must be a whole number.
+      const inValid = parsed >= 0 && parsed < 12;
+      const ftValid = height.ft != null && Number.isInteger(height.ft);
+      if (!inValid || !ftValid) {
+        setHeight({ cm: null, ft: height.ft, in: parsed });
         return;
       }
       const cm = conversions.ftInToCm(height.ft, parsed);
@@ -101,20 +111,32 @@ export default function IdealWeightCalculator() {
     return idealWeightHealthyRange(height.cm);
   }, [isAdult, height.cm]);
 
-  // Historical formulas for educational comparison only — require explicit sex.
+  // Historical formulas for educational comparison only — require explicit sex
+  // and a height at/above five feet (152.4 cm). The BMI-22 key is excluded so
+  // it is not duplicated in the historical list.
   const historicalWeights = useMemo(() => {
     if (
       !isAdult ||
       height.cm == null ||
-      (gender !== "male" && gender !== "female")
+      (gender !== "male" && gender !== "female") ||
+      !historicalFormulasApplicable(height.cm)
     ) {
       return {};
     }
-    return calculateAllIdealWeights({
+    const all = calculateAllIdealWeights({
       heightCm: height.cm,
       gender,
     });
+    if (!all) return {};
+    const { bmi, ...historical } = all;
+    return historical;
   }, [isAdult, height.cm, gender]);
+
+  // Historical formulas are suppressed below five feet (152.4 cm) because their
+  // published applicability does not support extrapolation. BMI-based outputs
+  // remain available.
+  const historicalSuppressed =
+    isAdult && height.cm != null && !historicalFormulasApplicable(height.cm);
 
   // Present formulas as separate reference estimates (no single averaged value)
   const historicalList = useMemo(() => {
@@ -127,8 +149,8 @@ export default function IdealWeightCalculator() {
     if (!referenceWeight || !healthyRange) return null;
 
     const rangeValue = unitSystem === 'metric'
-      ? `${healthyRange.min.kg}-${healthyRange.max.kg}`
-      : `${healthyRange.min.lb}-${healthyRange.max.lb}`;
+      ? `${fmt1(healthyRange.min.kg)}-${fmt1(healthyRange.max.kg)}`
+      : `${fmt1(healthyRange.min.lb)}-${fmt1(healthyRange.max.lb)}`;
 
     return validateResultForPrivacy({
       value: rangeValue,
@@ -302,11 +324,12 @@ export default function IdealWeightCalculator() {
               </h3>
               <p className="text-5xl font-extrabold tracking-tight text-emerald-600 dark:text-emerald-400">
                 {unitSystem === "metric"
-                  ? `${healthyRange.min.kg} - ${healthyRange.max.kg} kg`
-                  : `${healthyRange.min.lb} - ${healthyRange.max.lb} lbs`}
+                  ? `${fmt1(healthyRange.min.kg)} - ${fmt1(healthyRange.max.kg)} kg`
+                  : `${fmt1(healthyRange.min.lb)} - ${fmt1(healthyRange.max.lb)} lbs`}
               </p>
               <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                Population-level reference (BMI 18.5–24.9), not an individualized target
+                Population-level reference (BMI 18.5 to under 25), not an
+                individualized target. The upper weight bound is exclusive.
               </p>
             </motion.div>
           )}
@@ -319,16 +342,17 @@ export default function IdealWeightCalculator() {
             className="mt-8 rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
           >
             <h3 className="mb-4 text-center text-lg font-semibold">
-              Middle of Reference Range (BMI 22)
+              BMI 22 Reference Point
             </h3>
             <div className="text-center">
               <p className="text-4xl font-bold text-gray-700 dark:text-gray-300">
                 {unitSystem === "metric"
-                  ? `${round(referenceWeight, 1)} kg`
-                  : `${round(conversions.kgToLb(referenceWeight), 1)} lbs`}
+                  ? `${fmt1(referenceWeight)} kg`
+                  : `${fmt1(kgToLb(referenceWeight))} lbs`}
               </p>
               <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                Educational reference point only — not a prescribed target
+                An illustrative weight corresponding to a BMI of 22 at your
+                entered height. This is not a recommended target weight.
               </p>
             </div>
           </motion.div>
@@ -340,13 +364,14 @@ export default function IdealWeightCalculator() {
                 <>
                   The weight-for-height reference range for your height is{" "}
                   {unitSystem === "metric"
-                    ? `${healthyRange.min.kg} - ${healthyRange.max.kg} kg`
-                    : `${healthyRange.min.lb} - ${healthyRange.max.lb} lbs`},
-                  based on a healthy BMI of 18.5–24.9. The middle of this
-                  range (BMI 22) corresponds to approximately{" "}
+                    ? `${fmt1(healthyRange.min.kg)} - ${fmt1(healthyRange.max.kg)} kg`
+                    : `${fmt1(healthyRange.min.lb)} - ${fmt1(healthyRange.max.lb)} lbs`}
+                  , based on the adult healthy BMI interval 18.5 to under 25
+                  (the upper bound is exclusive). The BMI 22 reference point
+                  corresponds to approximately{" "}
                   {unitSystem === "metric"
-                    ? round(referenceWeight, 1)
-                    : round(conversions.kgToLb(referenceWeight), 1)}{" "}
+                    ? fmt1(referenceWeight)
+                    : fmt1(kgToLb(referenceWeight))}{" "}
                   {unitSystem === "metric" ? "kg" : "lbs"}.
                 </>
               }
@@ -370,6 +395,22 @@ export default function IdealWeightCalculator() {
               }
             />
           </div>
+
+          {/* Historical formula applicability note (below five feet) */}
+          {historicalSuppressed && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.6, delay: 0.6 }}
+              className="mt-8 rounded-xl bg-white p-6 text-center shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
+            >
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Historical formulas are not displayed for this height because
+                their applicability is limited. The BMI-based reference range and
+                BMI 22 reference point above still apply.
+              </p>
+            </motion.div>
+          )}
 
           {/* Historical formula comparison (educational context only) */}
           {Object.keys(historicalList).length > 0 && (
@@ -397,11 +438,11 @@ export default function IdealWeightCalculator() {
                     className="rounded-lg bg-gray-50 p-4 text-center dark:bg-gray-700/50"
                   >
                     <h5 className="mb-2 font-semibold capitalize text-xs">
-                      {formula.charAt(0).toUpperCase() + formula.slice(1)}
+                      {formula.charAt(0).toUpperCase() + formula.slice(1)}{" "}
                       Formula
                     </h5>
                     <p className="text-xl font-bold text-blue-600 dark:text-blue-400">
-                      {unitSystem === "metric" ? result.kg : result.lb}
+                      {unitSystem === "metric" ? fmt1(result.kg) : fmt1(result.lb)}
                       <span className="text-sm font-normal ml-1">
                         {unitSystem === "metric" ? "kg" : "lbs"}
                       </span>
@@ -431,8 +472,9 @@ export default function IdealWeightCalculator() {
             </h4>
             <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
               <li>
-                • The primary reference uses a BMI of 22 (middle of the
-                healthy range 18.5–24.9)
+                • The primary reference range uses the adult healthy BMI
+                interval 18.5 to under 25; the BMI 22 reference point is
+                illustrative
               </li>
               <li>
                 • Historical formulas (Robinson, Miller, Devine, Hamwi) are
@@ -508,9 +550,12 @@ export default function IdealWeightCalculator() {
                 value={shareResult.value}
                 unit={shareResult.unit}
                 category="Weight-for-height reference"
-                subtitle={shareResult.referencePoint
-                  ? `Middle reference (BMI 22): ${shareResult.referencePoint} ${shareResult.unit}`
-                  : `Healthy range: ${shareResult.healthyRange}`}
+                details={[
+                  {
+                    label: "BMI 22 reference",
+                    value: `${fmt1(shareResult.referencePoint)} ${shareResult.unit}`,
+                  },
+                ]}
                 aspectRatio="square"
               />
             </div>
@@ -560,9 +605,12 @@ export default function IdealWeightCalculator() {
             value={shareResult.value}
             unit={shareResult.unit}
             category="Weight-for-height reference"
-            subtitle={shareResult.referencePoint
-              ? `Middle reference (BMI 22): ${shareResult.referencePoint} ${shareResult.unit}`
-              : `Healthy range: ${shareResult.healthyRange}`}
+            details={[
+              {
+                label: "BMI 22 reference",
+                value: `${fmt1(shareResult.referencePoint)} ${shareResult.unit}`,
+              },
+            ]}
           />
         </div>
       )}

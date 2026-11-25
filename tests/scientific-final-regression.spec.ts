@@ -157,15 +157,15 @@ test.describe("Scientific final regression", () => {
     await page.getByLabel("Height (cm)").fill("170");
     await page.getByLabel("Age").fill("20");
 
-    // Metric reference point and range (BMI 22 → 63.6 kg; 18.5–24.9 → 53.5–72 kg).
-    await expect(page.getByText("53.5 - 72 kg").first()).toBeVisible();
+    // Metric reference point and range (BMI 22 → 63.6 kg; 18.5–<25 → 53.5–72.3 kg).
+    await expect(page.getByText("53.5 - 72.3 kg").first()).toBeVisible();
     await expect(page.getByText("63.6 kg").first()).toBeVisible();
 
     // Toggle to Imperial (canonical 170 cm persists).
     await page.getByRole("button", { name: /Imperial/ }).click();
 
-    // Imperial range: 53.5 kg → 117.9 lb, 72 kg → 158.6 lb.
-    await expect(page.getByText("117.9 - 158.6 lbs").first()).toBeVisible();
+    // Imperial range: 53.5 kg → 117.9 lb, 72.25 kg → 159.3 lb.
+    await expect(page.getByText("117.9 - 159.3 lbs").first()).toBeVisible();
     // Imperial BMI-22 reference point: 63.6 kg → 140.2 lb.
     await expect(page.getByText("140.2 lbs").first()).toBeVisible();
 
@@ -173,7 +173,7 @@ test.describe("Scientific final regression", () => {
       page.getByRole("heading", { name: "Your Shareable Result" })
     ).toBeVisible();
     const card = page.locator('[data-shareable-card]').first();
-    await expect(card).toContainText("117.9-158.6");
+    await expect(card).toContainText("117.9-159.3");
     await expect(card).toContainText("140.2");
     await expect(card).toContainText("lbs");
   });

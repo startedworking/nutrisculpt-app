@@ -222,7 +222,9 @@ test("BMI obesity class distinctions", () => {
 test("BMI healthy range from height", () => {
   const range = bmiHealthyRange(170);
   assert.deepEqual(range.min, { kg: 53.5, lb: 117.9 });
-  assert.deepEqual(range.max, { kg: 72.0, lb: 158.6 });
+  // Upper bound uses the exclusive BMI 25 boundary (25 × 1.7² = 72.25 → 72.3).
+  assert.deepEqual(range.max, { kg: 72.3, lb: 159.3 });
+  assert.equal(range.maxExclusive, true);
   assert.equal(bmiHealthyRange(0), null);
 });
 

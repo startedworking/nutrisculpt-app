@@ -22,6 +22,8 @@ import {
   oneRmReliability,
   evaluateOneRmInputPolicy,
   parseFiniteNumber,
+  resolveExerciseName,
+  customTrainingLoad,
 } from "@/lib/calculators.mjs";
 
 // Training percentage ranges.
@@ -52,16 +54,24 @@ const EXERCISE_CATEGORIES = [
 
 export default function OneRMCalculator() {
   const [unitSystem, setUnitSystem] = useState("metric");
-  const [exercise, setExercise] = useState("Bench Press");
+  // No default exercise: the selection provides context only and never changes
+  // the prediction equation. Blank until the user chooses.
+  const [exercise, setExercise] = useState("");
+  const [customExercise, setCustomExercise] = useState("");
   const [reps, setReps] = useState(null);
-  
+  // Custom training-load percentage. This is an initial calculator setting
+  // (70%), not a recommended training intensity.
+  const [customPct, setCustomPct] = useState(70);
+
   // Store both metric and imperial values; null = blank / not provided.
   const [weight, setWeight] = useState({ kg: null, lb: null });
 
   // Share functionality
   const { shareableCardRef, generateImage, generateShareData, validateResultForPrivacy } = useShareableImage('one-rm');
 
-  // Weight handlers — convert only finite values; blank clears the pair.
+  // Weight handlers — convert only finite values; blank clears the pair. The
+  // canonical kilogram value is stored at full precision (no premature
+  // rounding); display rounding happens only at the presentation boundary.
   const handleWeightChange = (value, unit) => {
     const parsed = parseFiniteNumber(value);
     if (parsed == null) {
@@ -71,9 +81,14 @@ export default function OneRMCalculator() {
     if (unit === "kg") {
       setWeight({ kg: parsed, lb: round(kgToLb(parsed), 1) });
     } else {
-      setWeight({ kg: round(lbToKg(parsed), 1), lb: parsed });
+      setWeight({ kg: lbToKg(parsed), lb: parsed });
     }
   };
+
+  // Resolved exercise label used consistently across results, explanation,
+  // share preview, PNG and share text. Never rendered as HTML.
+  const resolvedExercise = resolveExerciseName(exercise, customExercise);
+  const shareExercise = resolvedExercise || "Custom Exercise";
 
   const weightKg = weight.kg;
   const weightValid = Number.isFinite(weightKg) && weightKg > 0;
@@ -154,6 +169,17 @@ export default function OneRMCalculator() {
     });
   }, [oneRMResults]);
 
+  // Custom training load: raw (unrounded) estimated 1RM × selected % / 100.
+  // The percentage is validated (30–100, finite); invalid input yields no load.
+  const customPctValid =
+    Number.isFinite(customPct) && customPct >= 30 && customPct <= 100;
+  const customLoad = useMemo(() => {
+    if (!oneRMResults) return null;
+    const loadKg = customTrainingLoad(oneRMResults.primary.value, customPct);
+    if (loadKg == null) return null;
+    return { kg: round(loadKg, 1), lb: round(kgToLb(loadKg), 1) };
+  }, [oneRMResults, customPct]);
+
   // Prepare share data for 1RM results
   const shareResult = useMemo(() => {
     if (!oneRMResults) return null;
@@ -167,11 +193,11 @@ export default function OneRMCalculator() {
         0
       ),
       unit: unitSystem === 'metric' ? 'kg' : 'lb',
-      exercise: exercise,
+      exercise: shareExercise,
       repsUsed: reps,
       method: PRIMARY_ONE_RM_ID,
     }, ['weight']); // Exclude sensitive input data
-  }, [oneRMResults, unitSystem, exercise, reps, validateResultForPrivacy]);
+  }, [oneRMResults, unitSystem, shareExercise, reps, validateResultForPrivacy]);
 
   const shareData = useMemo(() => {
     if (!shareResult) return null;
@@ -215,25 +241,53 @@ export default function OneRMCalculator() {
           {/* Exercise Selection */}
           <div>
             <label className="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300">
-              Exercise
+              Exercise <span className="text-xs font-normal text-gray-400">(optional)</span>
             </label>
             <select
               value={exercise}
-              onChange={(e) => setExercise(e.target.value)}
+              onChange={(e) => {
+                const value = e.target.value;
+                setExercise(value);
+                // Do not silently reuse a custom name after changing exercises.
+                if (value !== "Other") setCustomExercise("");
+              }}
               className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
             >
+              <option value="">Select exercise (optional)</option>
               {EXERCISE_CATEGORIES.map((ex) => (
                 <option key={ex} value={ex}>
                   {ex}
                 </option>
               ))}
             </select>
+            {exercise === "Other" && (
+              <div className="mt-2">
+                <label
+                  htmlFor="custom-exercise-name"
+                  className="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400"
+                >
+                  Exercise Name
+                </label>
+                <input
+                  id="custom-exercise-name"
+                  type="text"
+                  value={customExercise}
+                  onChange={(e) => setCustomExercise(e.target.value.slice(0, 20))}
+                  placeholder="e.g., Leg Press"
+                  maxLength={20}
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                />
+                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                  {customExercise.length}/20 characters
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Weight Input */}
           <InputField
             label={`Weight (${unitSystem === "metric" ? "kg" : "lbs"})`}
-            value={unitSystem === "metric" ? (weight.kg == null ? "" : weight.kg) : (weight.lb == null ? "" : weight.lb)}
+            value={unitSystem === "metric" ? (weight.kg == null ? "" : round(weight.kg, 1)) : (weight.lb == null ? "" : weight.lb)}
             onChange={(value) =>
               handleWeightChange(
                 value,
@@ -256,6 +310,19 @@ export default function OneRMCalculator() {
             max="15"
             step="1"
           />
+        </div>
+
+        {/* Entered-load explanation */}
+        <div className="mt-4 rounded-lg bg-blue-50 p-3 text-xs text-blue-900 ring-1 ring-inset ring-blue-200 dark:bg-blue-950/40 dark:text-blue-200 dark:ring-blue-900/40">
+          <p className="font-medium">Weight used for the completed repetitions</p>
+          <ul className="mt-1 list-disc space-y-0.5 pl-4">
+            <li>Barbell exercises: enter the total lifted load, including the bar.</li>
+            <li>Dumbbell exercises: consistently enter either per-dumbbell or combined load and interpret the result accordingly.</li>
+            <li>Machine exercises: the result relates to that machine&apos;s indicated resistance.</li>
+            <li>Bodyweight exercises: added weight alone does not necessarily represent total resistance.</li>
+            <li>Pull-up/Chin-up: estimating 1RM from bodyweight plus added resistance has clear limitations.</li>
+          </ul>
+          <p className="mt-1">No bodyweight is added automatically.</p>
         </div>
 
         {!weightValid && (
@@ -307,6 +374,11 @@ export default function OneRMCalculator() {
             {/* Primary result */}
             <div className="mb-6 rounded-lg bg-gradient-to-r from-blue-100 to-purple-100 p-6 text-center dark:from-blue-900/30 dark:to-purple-900/30">
               <h4 className="mb-2 text-lg font-semibold">Primary Estimate (Brzycki)</h4>
+              {resolvedExercise && (
+                <p className="mb-1 text-sm font-medium text-gray-700 dark:text-gray-300">
+                  {resolvedExercise}
+                </p>
+              )}
               <p className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-400">
                 {unitSystem === "metric"
                   ? round(oneRMResults.primary.value, 0)
@@ -376,16 +448,32 @@ export default function OneRMCalculator() {
           <ResultExplanation
             whatItMeans={
               <>
-                Your estimated <span className="font-semibold">one-repetition maximum (1RM)</span> is
-                an estimate of the maximum weight you could lift once for {exercise} with proper
-                form. The primary estimate uses the <span className="font-semibold">Brzycki</span>{" "}
-                equation applied to the weight you lifted (
-                {unitSystem === "metric"
-                  ? round(oneRMResults.primary.value, 0)
-                  : round(kgToLb(oneRMResults.primary.value), 0)}{" "}
-                {unitSystem === "metric" ? "kg" : "lbs"}) and the{" "}
-                <span className="font-semibold">{reps} repetitions</span> performed. The other six
-                equations are shown for comparison only.
+                {resolvedExercise ? (
+                  <>
+                    For <span className="font-semibold">{resolvedExercise}</span>, you
+                    recorded a load of{" "}
+                  </>
+                ) : (
+                  <>You recorded a load of </>
+                )}
+                <span className="font-semibold">
+                  {unitSystem === "metric"
+                    ? round(weightKg, 1)
+                    : round(kgToLb(weightKg), 1)}{" "}
+                  {unitSystem === "metric" ? "kg" : "lbs"}
+                </span>{" "}
+                and completed{" "}
+                <span className="font-semibold">{reps} repetitions</span>. The
+                primary estimate uses the <span className="font-semibold">Brzycki</span>{" "}
+                equation to predict an estimated{" "}
+                <span className="font-semibold">one-repetition maximum (1RM)</span> of{" "}
+                <span className="font-semibold">
+                  {unitSystem === "metric"
+                    ? round(oneRMResults.primary.value, 0)
+                    : round(kgToLb(oneRMResults.primary.value), 0)}{" "}
+                  {unitSystem === "metric" ? "kg" : "lbs"}
+                </span>
+                . The other six equations are shown for comparison only.
               </>
             }
             whyItMatters={
@@ -423,9 +511,10 @@ export default function OneRMCalculator() {
             Training Weight Percentages
           </h3>
           <p className="mb-6 text-center text-xs text-gray-500 dark:text-gray-400">
-            Loads are calculated from the primary (Brzycki) estimate. Repetition ranges are
-            approximate population means, not guarantees; the leg press allows more repetitions
-            than the bench press at the same relative load.
+            Loads are calculated from the primary (Brzycki) estimate. Repetition
+            ranges are approximate population means, not guarantees; the same
+            relative load does not guarantee a fixed number of repetitions and
+            varies by exercise and individual.
           </p>
 
           <div className="space-y-3">
@@ -443,7 +532,7 @@ export default function OneRMCalculator() {
                   <div>
                     <div className="font-semibold">{purpose}</div>
                     <div className="text-sm text-gray-600 dark:text-gray-400">
-                      ≈ {repRange} reps to failure
+                      ≈ {repRange} reps (approximate)
                     </div>
                   </div>
                 </div>
@@ -457,6 +546,68 @@ export default function OneRMCalculator() {
                 </div>
               </div>
             ))}
+          </div>
+
+          {/* Custom training load */}
+          <div className="mt-6 rounded-lg bg-gray-50 p-4 dark:bg-gray-700/50">
+            <h4 className="mb-1 text-center font-semibold">
+              Calculate a Custom Training Load
+            </h4>
+            <p className="mb-3 text-center text-xs text-gray-500 dark:text-gray-400">
+              Choose a percentage of your estimated 1RM. 70% is an initial
+              calculator setting, not a recommended training intensity.
+            </p>
+            <div className="flex items-center justify-center gap-4">
+              <input
+                type="range"
+                min="30"
+                max="100"
+                step="1"
+                value={customPctValid ? customPct : 70}
+                onChange={(e) => setCustomPct(parseInt(e.target.value, 10))}
+                className="w-full max-w-xs accent-blue-600"
+                aria-label="Custom training percentage"
+              />
+              <input
+                type="number"
+                min="30"
+                max="100"
+                step="1"
+                value={Number.isFinite(customPct) ? customPct : ""}
+                onChange={(e) => setCustomPct(parseFiniteNumber(e.target.value))}
+                className="w-20 rounded-lg border border-gray-300 px-2 py-1 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                aria-label="Custom training percentage value"
+              />
+            </div>
+            {!customPctValid && (
+              <p className="mt-2 text-center text-xs text-red-600 dark:text-red-400">
+                Enter a percentage between 30 and 100.
+              </p>
+            )}
+            {customLoad && (
+              <>
+                <p className="mt-3 text-center text-lg font-bold">
+                  {unitSystem === "metric" ? customLoad.kg : customLoad.lb}
+                  <span className="text-sm font-normal ml-1">
+                    {unitSystem === "metric" ? "kg" : "lbs"}
+                  </span>
+                </p>
+                <p className="text-center text-xs text-gray-500 dark:text-gray-400">
+                  Calculated load based on an estimated maximum, not a prescribed
+                  training weight.
+                </p>
+              </>
+            )}
+            {customLoad && customPct >= 90 && (
+              <p className="mt-2 text-center text-xs text-amber-700 dark:text-amber-300">
+                Higher relative loads generally require greater technical
+                proficiency, preparation and recovery. This calculated load is not
+                a recommendation to attempt it.
+                {customPct === 100
+                  ? " At 100% this represents the estimated maximum, not an automatically safe or achievable attempt."
+                  : ""}
+              </p>
+            )}
           </div>
 
           <p className="mt-4 text-xs text-gray-500 dark:text-gray-400">
