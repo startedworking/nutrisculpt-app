@@ -35,7 +35,7 @@ const Home = () => {
               Nourishing Bodies &amp; Sculpting Greatness
             </h1>
             <p className="text-xl text-gray-600 dark:text-gray-300 mb-8 font-medium leading-relaxed">
-              Build Strength. Move Better. Live Stronger.
+              Evidence-informed coaching for strength, health and movement.
             </p>
             <p className="text-base text-gray-600 dark:text-gray-400 mb-10 leading-relaxed max-w-lg mx-auto">
               Personalized exercise coaching to support your strength,
@@ -54,7 +54,7 @@ const Home = () => {
                 href="/#services"
                 className="rounded-lg border border-gray-200 dark:border-gray-700 px-8 py-4 font-bold text-gray-900 dark:text-white shadow-sm transition hover:bg-gray-50 dark:hover:bg-gray-800"
               >
-                Explore Our Services
+                Explore Services
               </Link>
             </div>
             <p className="mt-10 text-sm text-gray-500 dark:text-gray-400 max-w-lg mx-auto leading-relaxed">
@@ -304,7 +304,7 @@ const Home = () => {
                 text: "Virtual 1-1 sessions with live feedback and customized programming, anywhere.",
               },
               {
-                title: "Consultations &amp; assessments",
+                title: "Fitness Assessments & Consultations",
                 text: "Individualized assessment to understand your goals and movement needs.",
               },
               {

@@ -1,4 +1,4 @@
-export const BRAND = "Nutrisculpt";
+export const BRAND = "NutriSculpt";
 
 export const LINKS = {
   youtube: process.env.NEXT_PUBLIC_YOUTUBE,

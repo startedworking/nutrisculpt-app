@@ -24,7 +24,7 @@ test.describe("NutriSculpt navigation flows & source attribution", () => {
     await expect(page).toHaveURL(
       /\/services\/category\/strength-fitness-performance\?.*source=calculator-bmi/,
     );
-    const expert = page.getByRole("link", { name: "Connect to an Expert" });
+    const expert = page.locator("main").getByRole("link", { name: "Connect to an Expert" });
     await expect(expert).toHaveAttribute(
       "href",
       /\/expert-connect\?.*source=calculator-bmi/,
@@ -170,7 +170,7 @@ test.describe("Service category context-aware Back navigation", () => {
     await expect(page).toHaveURL(
       /\/services\/category\/strength-fitness-performance\?.*source=calculator-calories/,
     );
-    const expert = page.getByRole("link", { name: "Connect to an Expert" });
+    const expert = page.locator("main").getByRole("link", { name: "Connect to an Expert" });
     await expect(expert).toHaveAttribute(
       "href",
       /source=calculator-calories/,
@@ -225,7 +225,7 @@ test.describe("Service category context-aware Back navigation", () => {
   test("connect to an expert still works on every category", async ({ page }) => {
     for (const slug of CATEGORIES) {
       await page.goto(`/services/category/${slug}`);
-      const expert = page.getByRole("link", { name: "Connect to an Expert" });
+      const expert = page.locator("main").getByRole("link", { name: "Connect to an Expert" });
       await expect(expert).toBeVisible();
       await expect(expert).toHaveAttribute(
         "href",
@@ -239,7 +239,7 @@ test.describe("Service category context-aware Back navigation", () => {
   }) => {
     for (const slug of CATEGORIES) {
       await page.goto(`/services/category/${slug}?back=%2F%23services`);
-      const expert = page.getByRole("link", { name: "Connect to an Expert" });
+      const expert = page.locator("main").getByRole("link", { name: "Connect to an Expert" });
       await expect(expert).toHaveAttribute(
         "href",
         /serviceReturnTo=%2F%23services/,
@@ -255,7 +255,7 @@ test.describe("Service category context-aware Back navigation", () => {
     // wiring is asserted for all five categories in a separate test.
     const slug = "strength-fitness-performance";
     await page.goto(`/services/category/${slug}?back=%2F%23services`);
-    const expert = page.getByRole("link", { name: "Connect to an Expert" });
+    const expert = page.locator("main").getByRole("link", { name: "Connect to an Expert" });
     await expert.click();
     await expect(page).toHaveURL(/\/expert-connect/);
     // Back on the enquiry page returns to the category, carrying serviceReturnTo
@@ -290,7 +290,7 @@ test.describe("Service category context-aware Back navigation", () => {
     await expect(page).toHaveURL(
       /\/services\/category\/strength-fitness-performance\?.*back=\/one-rm/,
     );
-    const expert = page.getByRole("link", { name: "Connect to an Expert" });
+    const expert = page.locator("main").getByRole("link", { name: "Connect to an Expert" });
     const expertHref = await expert.getAttribute("href");
     expect(expertHref).toContain("serviceReturnTo=%2Fone-rm");
     await expert.click();
@@ -331,7 +331,7 @@ test.describe("Service category context-aware Back navigation", () => {
     await expect(page).toHaveURL(
       /\/services\/category\/strength-fitness-performance\?.*back=%2Ftransformation/,
     );
-    const expert = page.getByRole("link", { name: "Connect to an Expert" });
+    const expert = page.locator("main").getByRole("link", { name: "Connect to an Expert" });
     const expertHref = await expert.getAttribute("href");
     expect(expertHref).toContain("serviceReturnTo=%2Ftransformation");
     await expert.click();

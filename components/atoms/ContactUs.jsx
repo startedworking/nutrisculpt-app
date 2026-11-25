@@ -1,34 +1,34 @@
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
-  faWhatsapp,
   faInstagram,
   faYoutube,
 } from "@fortawesome/free-brands-svg-icons";
 import { motion } from "framer-motion";
+import Link from "next/link";
 import { LINKS } from "@/constants";
 
 const socials = [
   {
-    label: "WhatsApp",
-    icon: faWhatsapp,
-    color: `text-green-600 dark:text-green-400`,
-  },
-  {
     label: "Instagram",
     icon: faInstagram,
     color: `text-blue-600 dark:text-blue-400`,
+    href: LINKS?.instagram,
   },
   {
     label: "YouTube",
     icon: faYoutube,
     color: `text-red-600 dark:text-red-400`,
+    href: LINKS?.youtube,
   },
-];
-const SocialLink = ({ icon, color, label }) => {
+].filter((social) => Boolean(social.href));
+
+const SocialLink = ({ icon, color, label, href }) => {
   return (
     <motion.a
-      href={LINKS?.[label?.toLowerCase()]}
+      href={href}
       target="_blank"
+      rel="noopener noreferrer"
+      aria-label={label}
       className={`inline-flex items-center justify-center bg-white  font-bold py-3 px-3 sm:px-6 rounded-lg shadow-lg hover:bg-gray-200 dark:bg-gray-800  dark:hover:bg-gray-700 transition w-fit sm:w-auto gap-2 ${color}`}
       whileHover={{ scale: 1.1 }}
     >
@@ -49,17 +49,34 @@ const ContactSection = () => {
         transition={{ duration: 0.8 }}
         className="mx-auto max-w-7xl px-4 text-center sm:px-6 lg:px-8"
       >
-        <h3 className="text-3xl font-bold">Get In Touch</h3>
+        <h3 className="text-3xl font-bold">Connect to an Expert</h3>
         <p className="mt-4">
-          Have questions or ready to start your journey? Contact us now!
+          Discuss your fitness goals and explore the coaching options that fit
+          your circumstances.
         </p>
 
-        {/* Button Container */}
-        <div className="mt-6 flex items-center justify-center gap-6">
-          {socials.map(({ label, color, icon }) => (
-            <SocialLink key={label} icon={icon} color={color} label={label} />
-          ))}
+        <div className="mt-6 flex justify-center">
+          <Link
+            href="/expert-connect?source=homepage&back=%2F%23contact"
+            className="rounded-lg bg-white px-8 py-3 font-bold text-blue-700 shadow transition hover:bg-gray-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-blue-600"
+          >
+            Connect to an Expert
+          </Link>
         </div>
+
+        {socials.length > 0 && (
+          <div className="mt-8 flex items-center justify-center gap-6">
+            {socials.map(({ label, color, icon, href }) => (
+              <SocialLink
+                key={label}
+                icon={icon}
+                color={color}
+                label={label}
+                href={href}
+              />
+            ))}
+          </div>
+        )}
       </motion.div>
     </section>
   );

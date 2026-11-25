@@ -142,7 +142,7 @@ export const SERVICE_CATEGORIES = [
 export const QUALIFICATIONS = [
   {
     name: "ACSM Certified Personal Trainer (CPT)",
-    status: "Earned",
+    status: "Course completed",
   },
   {
     name: "ACSM Special Population Exercise Certification",

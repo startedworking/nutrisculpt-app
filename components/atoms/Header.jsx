@@ -19,9 +19,9 @@ const calculatorMenuItems = [
   { label: "Calorie Calculator", href: "/calories" },
   { label: "Macro Calculator", href: "/macros" },
   { label: "1RM Calculator", href: "/one-rm" },
-  { label: "Reference Weight", href: "/ideal-weight" },
-  { label: "Water Intake", href: "/water-intake" },
-  { label: "Heart Rate Zones", href: "/heart-rate" },
+  { label: "Reference Weight Calculator", href: "/ideal-weight" },
+  { label: "Water Intake Calculator", href: "/water-intake" },
+  { label: "Heart Rate Calculator", href: "/heart-rate" },
 ];
 
 const Header = ({ darkMode, toggleDarkMode }) => {
@@ -93,6 +93,7 @@ const Header = ({ darkMode, toggleDarkMode }) => {
               </li>
               <li className="relative" ref={dropdownRef}>
                 <button
+                  id="calculator-menu"
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
@@ -100,7 +101,7 @@ const Header = ({ darkMode, toggleDarkMode }) => {
                       setIsDropdownOpen(!isDropdownOpen);
                     }
                   }}
-                  className="inline-flex items-center gap-1 hover:text-blue-600 dark:hover:text-blue-400 focus:outline-none focus:text-blue-600 dark:focus:text-blue-400"
+                  className="inline-flex items-center gap-1 rounded hover:text-blue-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:hover:text-blue-400 dark:focus-visible:ring-offset-gray-800"
                   aria-expanded={isDropdownOpen}
                   aria-haspopup="true"
                   aria-label="Calculator menu"
@@ -129,7 +130,7 @@ const Header = ({ darkMode, toggleDarkMode }) => {
                           key={item.href}
                           href={item.href}
                           onClick={closeDropdown}
-                          className="block px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100 focus:bg-gray-100 focus:outline-none dark:text-gray-200 dark:hover:bg-gray-600 dark:focus:bg-gray-600"
+                          className="block rounded px-4 py-2 text-sm text-gray-700 transition-colors hover:bg-gray-100 focus:bg-gray-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 dark:text-gray-200 dark:hover:bg-gray-600 dark:focus:bg-gray-600"
                           role="menuitem"
                           tabIndex={isDropdownOpen ? 0 : -1}
                         >
@@ -150,10 +151,10 @@ const Header = ({ darkMode, toggleDarkMode }) => {
               </li>
               <li>
                 <Link
-                  href="/#contact"
-                  className="hover:text-blue-600 dark:hover:text-blue-400"
+                  href="/expert-connect?source=homepage&back=%2F"
+                  className="inline-flex items-center rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white shadow transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-gray-800"
                 >
-                  Contact
+                  Connect to an Expert
                 </Link>
               </li>
             </ul>
@@ -161,7 +162,7 @@ const Header = ({ darkMode, toggleDarkMode }) => {
 
           <button
             onClick={toggleDarkMode}
-            className="flex cursor-pointer items-center justify-center gap-2 text-gray-600 dark:text-gray-400"
+            className="flex cursor-pointer items-center justify-center gap-2 rounded text-gray-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:text-gray-400 dark:focus-visible:ring-offset-gray-800"
             aria-label={
               darkMode ? "Switch to light mode" : "Switch to dark mode"
             }
@@ -241,11 +242,11 @@ const Header = ({ darkMode, toggleDarkMode }) => {
               </li>
               <li>
                 <Link
-                  href="/#contact"
+                  href="/expert-connect?source=homepage&back=%2F"
                   onClick={closeMobile}
-                  className="block rounded px-2 py-2 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  className="block rounded-lg bg-blue-600 px-4 py-2 text-center font-semibold text-white hover:bg-blue-700"
                 >
-                  Contact
+                  Connect to an Expert
                 </Link>
               </li>
             </ul>
