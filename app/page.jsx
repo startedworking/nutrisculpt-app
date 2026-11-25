@@ -330,66 +330,8 @@ const Home = () => {
           </div>
         </div>
       </section>
-
       {/* G. Testimonials + enquiry CTA */}
-      <section id="testimonials" className="bg-white py-20 dark:bg-gray-800">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <h3 className="text-center text-3xl font-bold text-gray-800 dark:text-gray-200 mb-2">
-            What Clients Say
-          </h3>
-          <p className="text-center text-gray-600 dark:text-gray-400 max-w-2xl mx-auto mb-12">
-            Genuine feedback from people we have worked with.
-          </p>
-          <div className="mt-12 grid gap-8 sm:grid-cols-1 md:grid-cols-2">
-            {[
-              {
-                text: "Working with NutriSculpt has completely transformed my approach to fitness. The personalized training sessions helped me correct my posture issues from years of desk work, and I've never felt stronger or more confident. The attention to detail in movement analysis is incredible!",
-                name: "Priya Sharma",
-                role: "Software Engineer",
-              },
-              {
-                text: "The virtual training sessions are amazing! Even from abroad, I get the same quality of coaching as in-person sessions. The program design is tailored to my goals and the recovery protocols have helped me stay injury-free while building strength.",
-                name: "Rahul Mehta",
-                role: "Marketing Professional",
-              },
-              {
-                text: "As an athlete, the sports performance program took my game to the next level. The functional movement testing identified weaknesses I didn't know I had, and the targeted training improved my agility and power significantly.",
-                name: "Arjun Patel",
-                role: "Cricket Player",
-              },
-              {
-                text: "The rehabilitation program after my shoulder injury was exceptional. The blend of corrective exercises and recovery techniques helped me return to full strength faster than I expected. Highly recommend NutriSculpt!",
-                name: "Neha Singh",
-                role: "Teacher",
-              },
-            ].map((testimonial, index) => (
-              <motion.div
-                key={index}
-                initial={reduced ? { opacity: 1 } : { x: -50, opacity: 0 }}
-                whileInView={reduced ? { opacity: 1 } : { x: 0, opacity: 1 }}
-                transition={{ duration: 0.6, delay: index * 0.2 }}
-                className="rounded-lg bg-gray-100 p-6 shadow-lg dark:bg-gray-700"
-              >
-                <p className="text-gray-600 italic dark:text-gray-400">
-                  {testimonial.text}
-                </p>
-                <h5 className="mt-4 font-bold text-blue-600 dark:text-blue-400">
-                  - {testimonial.name}, {testimonial.role}
-                </h5>
-              </motion.div>
-            ))}
-          </div>
-          <div className="mt-12 flex justify-center">
-            <Link
-              href="/expert-connect?source=homepage&back=%2F%23testimonials"
-              className="rounded bg-blue-600 px-8 py-3 font-bold text-white shadow transition hover:bg-blue-700"
-            >
-              Connect to an expert
-            </Link>
-          </div>
-        </div>
-      </section>
-
+      {/* Removed unverified testimonials pending owner verification */}
       <ContactSection />
     </main>
   );

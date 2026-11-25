@@ -82,7 +82,7 @@ test.describe("Calculator next-step navigation", () => {
       /\/services\/category\/strength-fitness-performance\?.*source=calculator-bmi.*back=(?:%2F|\/)bmi/
     );
 
-    const expert = page.getByRole("link", { name: "Connect to an Expert" });
+    const expert = page.locator("main").getByRole("link", { name: "Connect to an Expert" });
     await expect(expert).toHaveAttribute("href", /source=calculator-bmi/);
     await expect(expert).toHaveAttribute("href", /serviceReturnTo=%2Fbmi/);
   });
@@ -124,7 +124,7 @@ test.describe("Calculator next-step navigation", () => {
       .locator("body")
       .innerText();
 
-    await page.getByRole("link", { name: /Connect to an Expert/ }).click();
+    await page.locator("main").getByRole("link", { name: /Connect to an Expert/ }).click();
     await expect(page).toHaveURL(/expert-connect/);
     await page.getByRole("link", { name: /Back/ }).click();
 

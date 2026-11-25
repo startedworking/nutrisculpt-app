@@ -117,8 +117,9 @@ export default function Terms() {
         </h2>
         <p className="text-gray-700 dark:text-gray-300">
           The website may link to external platforms (social media sharing,
-          Font Awesome icons, Google Fonts, Vercel Analytics, Supabase). We are
-          not responsible for their content, privacy practices, or terms.
+          Font Awesome icons, Google Fonts, Vercel Analytics, Neon PostgreSQL,
+          Google Apps Script). We are not responsible for their content, privacy
+          practices, or terms.
         </p>
       </section>
 

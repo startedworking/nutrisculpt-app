@@ -109,7 +109,7 @@ test.describe("Scientific final regression", () => {
     const before = await maintenanceText(page);
 
     // Navigate to Expert Connect and return via the in-app back link.
-    await page.getByRole("link", { name: /Connect to an Expert/ }).click();
+    await page.locator("main").getByRole("link", { name: /Connect to an Expert/ }).click();
     await expect(page).toHaveURL(/expert-connect/);
     await page.getByRole("link", { name: /Back/ }).click();
 

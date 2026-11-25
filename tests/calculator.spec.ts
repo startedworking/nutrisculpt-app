@@ -83,8 +83,9 @@ test.describe("NutriSculpt calculator interactions & PNG export", () => {
     await expect(page.getByRole("button", { name: /Copy Link/i })).toBeVisible();
     await page.getByRole("button", { name: /Copy Link/i }).click();
     // The headless Chromium clipboard API is unavailable, so we verify the copy
-    // control is present, clickable, and the menu remains functional after the
-    // click (a real interaction, not a forced click).
+    // control is present, clickable, and the menu closes after the interaction
+    // (expected UX). Re-open to verify download still works.
+    await shareBtn.click();
     await expect(page.getByRole("button", { name: /Download Image/i })).toBeVisible();
     await expect(page.getByRole("button", { name: /Copy Link/i })).toBeVisible();
   });

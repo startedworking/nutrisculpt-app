@@ -109,10 +109,11 @@ export default function PrivacyPolicy() {
         </h2>
         <ul className="space-y-2 text-gray-700 dark:text-gray-300 list-disc pl-5">
           <li><strong>Hosting:</strong> Vercel (vercel.com)</li>
-          <li><strong>Database (enquiries):</strong> Supabase (supabase.com)</li>
+          <li><strong>Database (enquiries):</strong> Neon PostgreSQL via @neondatabase/serverless (neon.tech)</li>
           <li><strong>Analytics:</strong> Vercel Web Analytics (analytics.vercel.com)</li>
           <li><strong>Fonts:</strong> Self-hosted / Google Fonts (fonts.googleapis.com, fonts.gstatic.com)</li>
           <li><strong>Icons:</strong> Font Awesome (cdnjs.cloudflare.com / use.fontawesome.com)</li>
+          <li><strong>Enquiry forwarding (optional):</strong> Google Apps Script (script.google.com) &mdash; only when <code>GOOGLE_APPS_SCRIPT_URL</code> is configured and the enquiry is not a replay. The local database remains the source of truth.</li>
         </ul>
         <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
           <strong>Owner action required:</strong> Confirm the above providers
@@ -142,8 +143,10 @@ export default function PrivacyPolicy() {
         <p className="text-gray-700 dark:text-gray-300">
           We use Vercel Web Analytics to understand aggregate site usage (page
           views, referrers, device type). Events from admin routes and
-          <code>/expert-connect</code> query parameters are excluded. No
-          personal identifiers are collected by the analytics script.
+          <code>/expert-connect</code> query parameters are excluded. The
+          analytics script does not intentionally collect personal identifiers,
+          but standard analytics data (IP address, user agent, referrer) may be
+          processed by Vercel as part of the service.
         </p>
       </section>
 
@@ -159,6 +162,9 @@ export default function PrivacyPolicy() {
           <li>Referral-source identifiers are validated against an allowlist.</li>
           <li>Safe-return navigation uses an allowlist to prevent open
             redirects.</li>
+          <li>Enquiry duplicate detection uses HMAC-SHA256 fingerprints of
+            normalized contact data; raw contact details are not stored in the
+            fingerprint table.</li>
         </ul>
       </section>
 
@@ -171,13 +177,15 @@ export default function PrivacyPolicy() {
           periods for:
         </p>
         <ul className="space-y-2 text-gray-700 dark:text-gray-300 list-disc pl-5 mt-2">
-          <li>Enquiry records in Supabase</li>
+          <li>Enquiry records in Neon PostgreSQL</li>
           <li>Analytics data in Vercel</li>
           <li>Any backup or log retention</li>
         </ul>
         <p className="mt-2 text-gray-700 dark:text-gray-300">
           Visitors may request deletion of their enquiry data by contacting us
-          (see Contact below).
+          (see Contact below). Deletion from the primary database does not
+          automatically remove data from backups, analytics, or third-party
+          services already shared with.
         </p>
       </section>
 
