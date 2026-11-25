@@ -609,22 +609,7 @@ export default function WaterIntakeCalculator() {
       )}
 
       {/* Calculator Next Step */}
-      <CalculatorNextStep
-        heading="What's Next"
-        description={
-          <>
-            Hydration is only one consideration in overall exercise preparation
-            and daily wellbeing. Explore your broader fitness picture.
-          </>
-        }
-        source="calculator-water-intake"
-        calculatorId="water-intake"
-        showEnquiry={true}
-        primaryCta={{
-          label: "Explore Your Fitness & Health Snapshot",
-          href: "/transformation",
-        }}
-      />
+      <CalculatorNextStep calculatorId="water-intake" />
 
       {/* Hidden Shareable Card for Image Generation */}
       {shareResult && (

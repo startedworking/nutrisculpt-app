@@ -146,6 +146,7 @@ test.describe("NutriSculpt route load + responsive + form validation", () => {
     }
     // Shareable result card still visible with reduced motion
     await page.goto("/bmi", { waitUntil: "load" });
+    await page.getByLabel("Age").fill("30");
     await page.locator(`label:has-text('Weight (kg)') + input`).fill("80");
     await page.locator(`label:has-text('Height (cm)') + input`).fill("175");
     await expect(

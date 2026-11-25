@@ -955,29 +955,7 @@ export default function MacroCalculator() {
       </div>
 
       {/* Calculator Next Step */}
-      <CalculatorNextStep
-        heading="What's Next"
-        description={
-          <>
-            Macronutrient distributions are examples; exercise habits,
-            individual goals and preferences are also relevant. Explore your
-            broader fitness picture or learn to train independently.
-          </>
-        }
-        source="calculator-macros"
-        calculatorId="macros"
-        showEnquiry={true}
-        primaryCta={{
-          label: "Explore Your Fitness & Health Snapshot",
-          href: "/transformation",
-        }}
-        secondaryLinks={[
-          {
-            label: "Fitness Education & Independent Training",
-            href: "/services/category/fitness-education-independence",
-          },
-        ]}
-      />
+      <CalculatorNextStep calculatorId="macros" />
 
       {/* Hidden Shareable Card for Image Generation */}
       {shareResult && (

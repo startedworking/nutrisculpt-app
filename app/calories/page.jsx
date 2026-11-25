@@ -748,29 +748,7 @@ export default function CalorieCalculator() {
         </div>
 
         {/* Calculator Next Step */}
-        <CalculatorNextStep
-          heading="What's Next"
-          description={
-            <>
-              Estimated energy expenditure is only one aspect of fitness
-              planning. Explore your broader fitness picture or coaching
-              options.
-            </>
-          }
-          source="calculator-calories"
-          calculatorId="calories"
-          showEnquiry={true}
-          primaryCta={{
-            label: "Explore Your Fitness & Health Snapshot",
-            href: "/transformation",
-          }}
-          secondaryLinks={[
-            {
-              label: "Explore Strength Coaching",
-              href: "/services/category/strength-fitness-performance",
-            },
-          ]}
-        />
+        <CalculatorNextStep calculatorId="calories" />
 
         {/* Hidden Shareable Card for Image Generation */}
       {shareResult && (

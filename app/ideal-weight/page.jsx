@@ -572,29 +572,7 @@ export default function IdealWeightCalculator() {
       )}
 
       {/* Calculator Next Step */}
-      <CalculatorNextStep
-        heading="What's Next"
-        description={
-          <>
-            The weight-for-height range is a population reference, not a
-            prescribed individual weight target. Explore your broader fitness
-            picture or learn to train independently.
-          </>
-        }
-        source="calculator-ideal-weight"
-        calculatorId="ideal-weight"
-        showEnquiry={true}
-        primaryCta={{
-          label: "Explore Your Fitness & Health Snapshot",
-          href: "/transformation",
-        }}
-        secondaryLinks={[
-          {
-            label: "Fitness Education & Independent Training",
-            href: "/services/category/fitness-education-independence",
-          },
-        ]}
-      />
+      <CalculatorNextStep calculatorId="ideal-weight" />
 
       {/* Hidden Shareable Card for Image Generation */}
       {shareResult && (

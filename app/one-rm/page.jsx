@@ -733,33 +733,7 @@ export default function OneRMCalculator() {
       )}
 
       {/* Calculator Next Step */}
-      <CalculatorNextStep
-        heading="What's Next"
-        description={
-          <>
-            An estimated 1RM can support strength-training discussions and help
-            you set training weights. Explore strength coaching or athletic
-            performance programs.
-          </>
-        }
-        source="calculator-one-rm"
-        calculatorId="one-rm"
-        showEnquiry={true}
-        primaryCta={{
-          label: "Explore Strength Coaching",
-          href: "/services/category/strength-fitness-performance",
-        }}
-        secondaryLinks={[
-          {
-            label: "Athletic Performance & Conditioning",
-            href: "/services/category/functional-fitness-life-stages",
-          },
-          {
-            label: "Explore Your Fitness & Health Snapshot",
-            href: "/transformation",
-          },
-        ]}
-      />
+      <CalculatorNextStep calculatorId="one-rm" />
 
       {/* Hidden Shareable Card for Image Generation */}
       {shareResult && (

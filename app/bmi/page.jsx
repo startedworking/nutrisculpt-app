@@ -416,29 +416,7 @@ export default function BmiCalculator() {
       )}
 
       {/* Calculator Next Step */}
-      <CalculatorNextStep
-        heading="What's Next"
-        description={
-          <>
-            BMI is one weight-for-height screening measure. Physical activity,
-            strength and other individual factors also matter. Explore your
-            broader fitness picture or coaching options.
-          </>
-        }
-        source="calculator-bmi"
-        calculatorId="bmi"
-        showEnquiry={true}
-        primaryCta={{
-          label: "Explore Your Fitness & Health Snapshot",
-          href: "/transformation",
-        }}
-        secondaryLinks={[
-          {
-            label: "Explore Strength Coaching",
-            href: "/services/category/strength-fitness-performance",
-          },
-        ]}
-      />
+      <CalculatorNextStep calculatorId="bmi" />
 
       {/* Hidden Shareable Card for Image Generation */}
       {shareResult && (

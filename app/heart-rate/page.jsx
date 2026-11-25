@@ -698,29 +698,7 @@ export default function HeartRateZoneCalculator() {
       )}
 
       {/* Calculator Next Step */}
-      <CalculatorNextStep
-        heading="What's Next"
-        description={
-          <>
-            Estimated heart-rate ranges can support general exercise-intensity
-            education. Explore performance coaching or your broader fitness
-            picture.
-          </>
-        }
-        source="calculator-heart-rate"
-        calculatorId="heart-rate"
-        showEnquiry={true}
-        primaryCta={{
-          label: "Explore Performance Coaching",
-          href: "/services/category/functional-fitness-life-stages",
-        }}
-        secondaryLinks={[
-          {
-            label: "Explore Your Fitness & Health Snapshot",
-            href: "/transformation",
-          },
-        ]}
-      />
+      <CalculatorNextStep calculatorId="heart-rate" />
 
       {/* Hidden Shareable Card for Image Generation */}
       {shareResult && (

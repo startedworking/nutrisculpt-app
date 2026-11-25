@@ -1239,7 +1239,7 @@ function TransformationForm() {
 
               <div>
                 <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Suggested NutriSculpt service:</p>
-                <div className="mt-2 flex items-center justify-between gap-4">
+                <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                   <div className="flex-1">
                     <div>
                       <p className="font-semibold text-gray-900 dark:text-white">{(() => { const category = ENQUIRY_SERVICE_OPTIONS.find((o) => o.value === selectedServiceCategory); return category?.label || "Select a category"; })()}</p>
@@ -1253,7 +1253,7 @@ function TransformationForm() {
                   <select
                     value={selectedServiceCategory}
                     onChange={(e) => setSelectedServiceCategory(e.target.value)}
-                    className="flex-shrink-0 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-gray-600 dark:bg-gray-900 dark:text-white"
+                    className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200 dark:border-gray-600 dark:bg-gray-900 dark:text-white sm:w-auto sm:flex-shrink-0"
                   >
                     {ENQUIRY_SERVICE_OPTIONS.map((option) => (
                       <option key={option.value} value={option.value}>
