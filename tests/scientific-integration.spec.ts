@@ -134,7 +134,7 @@ test.describe("Scientific integration", () => {
     // Age 20 → allowed, BMI range works without sex.
     await page.getByLabel("Age").fill("20");
     await expect(page.getByText(/Weight-for-Height Reference Range/)).toBeVisible();
-    await expect(page.getByText("53.5 - 72 kg").first()).toBeVisible();
+    await expect(page.getByText("53.5 - 72.3 kg").first()).toBeVisible();
 
     // Blank sex: BMI range works, no historical sex-specific values.
     await expect(
@@ -155,7 +155,7 @@ test.describe("Scientific integration", () => {
     // Select a sex → historical formulas appear.
     await page.locator('input[name="gender"]').first().click();
     await expect(page.getByText(/Historical Estimation Formulas/)).toBeVisible();
-    await expect(page.getByText(/DevineFormula/)).toBeVisible();
+    await expect(page.getByText(/Devine Formula/)).toBeVisible();
   });
 
   test("Reference Weight: Metric share unit correct, no duplicated unit", async ({

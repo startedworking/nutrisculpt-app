@@ -82,16 +82,25 @@ export default function HeartRateZoneCalculator() {
   // Use either custom or predicted max HR.
   const effectiveMaxHR = validation.predicted;
 
+  // A resting-HR reserve error (max ≤ resting) must not remove valid %HRmax
+  // results; only the core inputs (age/method/sex, or a valid custom max HR)
+  // gate %HRmax. The reserve error only blocks Heart Rate Reserve.
+  const onlyReserveError =
+    !validation.valid &&
+    Object.keys(validation.errors).length === 1 &&
+    Boolean(validation.errors.reserve);
+  const coreValid = validation.valid || onlyReserveError;
+
   // Percent-of-max-HR ranges (resting HR not required).
   const percentMaxRanges = useMemo(
-    () => (validation.valid && Number.isFinite(effectiveMaxHR) ? calculatePercentMaxRanges(effectiveMaxHR) : null),
-    [validation.valid, effectiveMaxHR]
+    () => (coreValid && Number.isFinite(effectiveMaxHR) ? calculatePercentMaxRanges(effectiveMaxHR) : null),
+    [coreValid, effectiveMaxHR]
   );
 
-  // Heart-rate-reserve ranges (resting HR required).
+  // Heart-rate-reserve ranges (resting HR required, must be positive and below max).
   const hrrRanges = useMemo(
     () =>
-      Number.isFinite(restingHR) && Number.isFinite(effectiveMaxHR) && effectiveMaxHR > restingHR
+      Number.isFinite(restingHR) && restingHR > 0 && Number.isFinite(effectiveMaxHR) && effectiveMaxHR > restingHR
         ? calculateHrrRanges(effectiveMaxHR, restingHR)
         : null,
     [restingHR, effectiveMaxHR]
@@ -111,10 +120,11 @@ export default function HeartRateZoneCalculator() {
         // distinguishing an entered (measured) max HR from a predicted estimate.
         maxHRLabel: useCustomMaxHR ? "ENTERED MAX HR" : "HRMAX ESTIMATE",
         method: method.name,
+        methodDetail: useCustomMaxHR ? "Entered value" : method.short,
       },
       ["age", "sex", "restingHR"] // Exclude sensitive input data
     );
-  }, [percentMaxRanges, goalRecommendation, selectedGoal, effectiveMaxHR, useCustomMaxHR, method.name, validateResultForPrivacy]);
+  }, [percentMaxRanges, goalRecommendation, selectedGoal, effectiveMaxHR, useCustomMaxHR, method.name, method.short, validateResultForPrivacy]);
 
   const shareData = useMemo(() => {
     if (!shareResult) return null;
@@ -254,16 +264,26 @@ export default function HeartRateZoneCalculator() {
               )}
             </div>
 
+            <div className="rounded-lg bg-gray-50 p-3 text-xs text-gray-600 dark:bg-gray-700/50 dark:text-gray-400">
+              <p className="font-medium text-gray-700 dark:text-gray-300">About the methods</p>
+              <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                <li>Tanaka (208 − 0.7 × age) is the default adult population estimate.</li>
+                <li>Traditional (220 − age) is a commonly used alternative.</li>
+                <li>Gulati (206 − 0.88 × age) was developed in women.</li>
+                <li>Different methods can produce different estimates; none gives an exact individual maximum.</li>
+              </ul>
+            </div>
+
             <div className="rounded-lg bg-blue-50 p-4 text-center dark:bg-blue-950/40">
               <p className="text-sm font-medium text-blue-900 dark:text-blue-200">
-                {useCustomMaxHR ? "Using your measured max HR" : "Predicted Max HR"}:{" "}
+                {useCustomMaxHR ? "Entered Maximum Heart Rate" : "Estimated Maximum Heart Rate"}:{" "}
                 {validation.valid && Number.isFinite(effectiveMaxHR)
                   ? `${effectiveMaxHR} bpm`
                   : "—"}
               </p>
               <p className="mt-1 text-xs text-blue-800 dark:text-blue-300">
                 {useCustomMaxHR
-                  ? "Your entered value is used directly."
+                  ? "Your entered value is used directly; it is not independently verified."
                   : `${method.name}. ${method.note}`}
               </p>
             </div>
@@ -342,7 +362,7 @@ export default function HeartRateZoneCalculator() {
           Your Heart Rate Training Zones
         </h3>
 
-        {!validation.valid ? (
+        {!coreValid ? (
           <div className="rounded-lg bg-red-50 p-4 text-sm text-red-900 ring-1 ring-inset ring-red-200 dark:bg-red-950/40 dark:text-red-200 dark:ring-red-900/40">
             <p className="font-semibold">Check your inputs</p>
             <ul className="mt-2 list-disc pl-5">
@@ -440,10 +460,13 @@ export default function HeartRateZoneCalculator() {
                 </p>
               </div>
             )}
-            {!hrrRanges && Number.isFinite(effectiveMaxHR) && (
+            {!hrrRanges && Number.isFinite(effectiveMaxHR) && coreValid && (
               <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                Enter your resting heart rate to also calculate Heart Rate
-                Reserve ranges.
+                {!Number.isFinite(restingHR) || restingHR <= 0
+                  ? "Enter a valid resting heart rate (30–120 bpm) to also calculate Heart Rate Reserve ranges."
+                  : effectiveMaxHR <= restingHR
+                    ? "Heart Rate Reserve is unavailable because your resting heart rate is at or above your maximum heart rate."
+                    : "Enter your resting heart rate to also calculate Heart Rate Reserve ranges."}
               </p>
             )}
           </>
@@ -655,8 +678,10 @@ export default function HeartRateZoneCalculator() {
               <ResultCard
                 type="heart"
                 value={shareResult.maxHR}
+                unit="bpm"
                 category={shareResult.goal}
-                subtitle={shareResult.maxHRLabel}
+                label={shareResult.maxHRLabel}
+                details={[{ label: "Method", value: shareResult.methodDetail }]}
                 aspectRatio="square"
               />
             </div>
@@ -704,8 +729,10 @@ export default function HeartRateZoneCalculator() {
             ref={shareableCardRef}
             type="heart"
             value={shareResult.maxHR}
+            unit="bpm"
             category={shareResult.goal}
-            subtitle={shareResult.maxHRLabel}
+            label={shareResult.maxHRLabel}
+            details={[{ label: "Method", value: shareResult.methodDetail }]}
           />
         </div>
       )}

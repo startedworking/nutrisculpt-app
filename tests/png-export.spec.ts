@@ -202,12 +202,12 @@ test.describe("Share semantics & unit normalization", () => {
     await page.locator('input[name="gender"]').first().click();
 
     await expect(page.getByText(/REFERENCE WEIGHT/).first()).toBeVisible();
-    await expect(page.getByText("53.5 - 72 kg").first()).toBeVisible();
+    await expect(page.getByText("53.5 - 72.3 kg").first()).toBeVisible();
     await expect(
       page.getByRole("heading", { name: "Your Shareable Result" })
     ).toBeVisible();
     const card = page.locator('[data-shareable-card]').first();
-    await expect(card).toContainText("53.5-72");
+    await expect(card).toContainText("53.5-72.3");
     await expect(card).toContainText("kg");
     await expect(page.locator("body")).not.toContainText("kg kg");
     await expect(page.locator("body")).not.toContainText("Ideal Weight");
@@ -243,7 +243,7 @@ test.describe("Share semantics & unit normalization", () => {
     const card = page.locator('[data-shareable-card]').first();
     await expect(card).toBeVisible();
     // Label is rendered with text-overflow truncation and must not break layout.
-    await expect(card.getByText(/ESTIMATED MAXIMUM HEART RATE/)).toBeVisible();
+    await expect(card.getByText(/HRMAX ESTIMATE/)).toBeVisible();
   });
 
   test("No fabricated percentages on share cards", async ({ page }) => {

@@ -99,9 +99,12 @@ export const useShareableImage = (calculatorType) => {
         case 'one-rm':
           shareText = `My estimated 1RM${result.exercise ? ` for ${result.exercise}` : ''} is ${result.value} ${result.unit} (Brzycki estimate from ${result.repsUsed} reps). Explore your strength estimate with NutriSculpt!`;
           break;
-        case 'heart-rate':
-          shareText = `Explore an estimated maximum heart rate and training guidance with NutriSculpt!`;
+        case 'heart-rate': {
+          const isEntered = result.maxHRLabel === 'ENTERED MAX HR';
+          const methodPart = isEntered ? '' : ` (${result.method})`;
+          shareText = `My ${isEntered ? 'entered' : 'estimated'} maximum heart rate is ${result.maxHR} bpm${methodPart}. Explore your heart-rate training guidance with NutriSculpt!`;
           break;
+        }
         case 'ideal-weight':
           shareText = `Explore a weight-for-height reference: ${result.value} ${result.unit}. Learn more with NutriSculpt!`;
           break;

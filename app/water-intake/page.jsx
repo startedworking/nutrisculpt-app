@@ -33,6 +33,22 @@ const CLIMATE_CONDITIONS = [
   { value: "cold", label: "Cold", description: "Low temperature; cold can blunt thirst." },
 ];
 
+// Context-dependent, qualitative guidance. The reference value is never altered
+// by a multiplier; these explain how to adapt habits to the selection.
+const ACTIVITY_GUIDANCE = {
+  "": null,
+  typical: "Ordinary daily activity: the reference value is unchanged. Drink to thirst and with meals.",
+  higher_activity: "Regular exercise or a physically demanding job increases fluid losses. Keep fluids available before and during activity; the reference value is unchanged.",
+  very_high_activity: "Prolonged or hard exercise with substantial sweating increases losses. Individualized hydration and electrolyte planning may be appropriate; the reference value is unchanged.",
+};
+
+const CLIMATE_GUIDANCE = {
+  "": null,
+  temperate: "Comfortable conditions: the reference value is unchanged.",
+  hot_humid: "Warm or humid conditions increase sweat losses. Adjust your habits to the conditions; the reference value is unchanged.",
+  cold: "Cold conditions can blunt thirst. Drink regularly even without thirst; the reference value is unchanged.",
+};
+
 // Health conditions are shown as cautions, not as automatic fluid adjustments.
 // Prescribed fluid restrictions always take priority over a calculator.
 const HEALTH_CONDITIONS = [
@@ -304,6 +320,16 @@ export default function WaterIntakeCalculator() {
                 the reference value, because sweat losses vary too much for a
                 fixed adjustment.
               </p>
+              {ACTIVITY_GUIDANCE[activityContext] && (
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  <span className="font-medium">Activity:</span> {ACTIVITY_GUIDANCE[activityContext]}
+                </p>
+              )}
+              {CLIMATE_GUIDANCE[climateContext] && (
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  <span className="font-medium">Climate:</span> {CLIMATE_GUIDANCE[climateContext]}
+                </p>
+              )}
             </div>
         </div>
 
@@ -407,16 +433,15 @@ export default function WaterIntakeCalculator() {
               className="rounded-xl bg-white p-6 shadow-lg ring-1 ring-gray-100 dark:bg-gray-800 dark:ring-gray-700"
             >
               <div className="text-center">
-                <h3 className="mb-4 text-lg font-semibold">Reference Total Water</h3>
+                <h3 className="mb-4 text-lg font-semibold">Total Water Population Reference</h3>
                 <p className="text-4xl font-extrabold tracking-tight text-blue-600 dark:text-blue-400">
-                  {referenceUnits.liters}L
+                  {referenceUnits.liters} L/day
                 </p>
                 <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-                  {referenceUnits.ml} ml · {referenceUnits.oz} fl oz · {referenceUnits.cups} cups
+                  ≈ {referenceUnits.ml} mL · ≈ {referenceUnits.oz} US fl oz · ≈ {referenceUnits.cups} US cups
                 </p>
                 <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
-                  Total water from all beverages and food (adult population reference). This is not
-                  an individual prescription.
+                  Includes beverages and water contained in food (adult population reference). This is not an individual prescription or a plain-water drinking target.
                 </p>
               </div>
             </motion.div>
@@ -463,11 +488,12 @@ export default function WaterIntakeCalculator() {
           <strong>Do not overdrink.</strong> Drinking far more fluid than your body needs, especially
           during prolonged exercise, can cause exercise-associated hyponatremia (low blood sodium),
           which can be serious. Drink according to thirst and replace sweat losses rather than
-          forcing a fixed volume.
+          forcing a fixed volume. For prolonged exercise, substantial sweating or demanding
+          conditions, individualized hydration and electrolyte planning may be appropriate.
         </p>
       </div>
 
-      {/* Tips Section */}
+      {/* Practical Hydration Habits */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -475,40 +501,42 @@ export default function WaterIntakeCalculator() {
         className="mt-8 rounded-xl bg-gradient-to-r from-cyan-50 to-blue-50 p-6 dark:from-cyan-900/20 dark:to-blue-900/20"
       >
         <h3 className="mb-4 text-lg font-semibold text-center">
-          💧 Hydration Tips
+          Practical Hydration Habits
         </h3>
         <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
           <div className="space-y-2">
             <h4 className="font-medium text-cyan-600 dark:text-cyan-400">
-              Stay Consistent:
+              Make fluids accessible:
             </h4>
             <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-              <li>• Sip throughout the day</li>
-              <li>• Drink according to thirst</li>
-              <li>• Replace fluids lost through sweat</li>
+              <li>• Keep drinking water accessible</li>
+              <li>• Include fluids with meals and daily activities</li>
             </ul>
           </div>
           <div className="space-y-2">
             <h4 className="font-medium text-blue-600 dark:text-blue-400">
-              Quality Matters:
+              Around exercise:
             </h4>
             <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-              <li>• Choose clean, filtered water</li>
-              <li>• Limit sugary drinks</li>
-              <li>• Herbal teas count too</li>
+              <li>• Consider fluid availability before and during exercise</li>
+              <li>• Replace exercise-related fluid losses appropriately</li>
             </ul>
           </div>
           <div className="space-y-2">
             <h4 className="font-medium text-indigo-600 dark:text-indigo-400">
-              Monitor Signs:
+              Adjust to conditions:
             </h4>
             <ul className="text-sm text-gray-600 dark:text-gray-400 space-y-1">
-              <li>• Urine colour can be a rough cue, not a diagnostic measure</li>
-              <li>• Diet, supplements and medications affect urine colour</li>
-              <li>• Adjust for activity and weather</li>
+              <li>• Adjust habits to the environment and your needs</li>
+              <li>• Urine colour is a rough cue only — diet, supplements and medications affect it</li>
             </ul>
           </div>
         </div>
+        <p className="mt-4 text-sm text-gray-600 dark:text-gray-400">
+          Thirst is useful for many healthy adults in ordinary conditions, but it may not be
+          sufficient in every circumstance (for example, in older adults, hot conditions or
+          prolonged exercise).
+        </p>
       </motion.div>
 
       {/* Health Disclaimer */}
@@ -563,8 +591,8 @@ export default function WaterIntakeCalculator() {
               <ResultCard
                 type="water"
                 value={shareResult.value}
-                category="General Estimate"
-                subtitle={shareResult.alternativeUnits}
+                category="Population reference"
+                subtitle="Includes beverages and food"
                 aspectRatio="square"
               />
             </div>
@@ -605,8 +633,8 @@ export default function WaterIntakeCalculator() {
             ref={shareableCardRef}
             type="water"
             value={shareResult.value}
-            category="General Estimate"
-            subtitle={shareResult.alternativeUnits}
+            category="Population reference"
+            subtitle="Includes beverages and food"
           />
         </div>
       )}

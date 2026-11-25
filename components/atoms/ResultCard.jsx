@@ -43,14 +43,14 @@ const CALCULATOR_CONFIGS = {
   },
   water: {
     icon: "💧",
-    label: "WATER REFERENCE",
+    label: "TOTAL WATER REFERENCE",
     color: "#00D9FF",
     unit: "L/day",
-    ringLabel: "Estimate",
+    ringLabel: "Reference",
   },
   heart: {
     icon: "❤️",
-    label: "ESTIMATED MAXIMUM HEART RATE",
+    label: "HRMAX ESTIMATE",
     color: "#EF4444",
     unit: "bpm",
     ringLabel: "Estimate",
@@ -113,6 +113,7 @@ const ResultCard = forwardRef(
       category,
       subtitle,
       details = null,
+      label = null,
       aspectRatio = "square",
       className = "",
       unit = null,
@@ -122,6 +123,7 @@ const ResultCard = forwardRef(
     ref
   ) => {
     const config = CALCULATOR_CONFIGS[type] || CALCULATOR_CONFIGS.bmi;
+    const headerLabel = label || config.label;
     const ringProgress = getRingProgress(progressValue);
     const currentColor = getColorByType(type, value);
     const [animatedProgress, setAnimatedProgress] = useState(0);
@@ -162,7 +164,7 @@ const ResultCard = forwardRef(
             </div>
             <div className="min-w-0">
               <h1 className="text-xs font-bold text-white truncate">NutriSculpt</h1>
-              <p className="text-xs text-gray-400 truncate">{config.label}</p>
+              <p className="text-xs text-gray-400 truncate">{headerLabel}</p>
             </div>
           </div>
 
