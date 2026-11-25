@@ -26,11 +26,11 @@ const Footer = () => {
   return (
     <footer className="w-full bg-gray-800 text-gray-200 dark:bg-gray-900">
       <div className="mx-auto max-w-7xl px-4 py-10 sm:px-6 lg:px-8">
-        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <p className="text-lg font-bold text-white">{BRAND}</p>
             <p className="mt-1 text-sm font-medium text-blue-300">
-              Nourishing Bodies &amp; Sculpting Greatness
+              Nourishing Bodies & Sculpting Greatness
             </p>
             <p className="mt-3 text-sm leading-relaxed text-gray-400">
               Evidence-informed exercise coaching for strength, health-focused
@@ -81,6 +81,38 @@ const Footer = () => {
                   </a>
                 </li>
               ))}
+            </ul>
+          </nav>
+
+          <nav aria-label="Footer legal">
+            <h2 className="text-sm font-semibold uppercase tracking-wider text-white">
+              Legal
+            </h2>
+            <ul className="mt-3 space-y-2 text-sm">
+              <li>
+                <Link
+                  href="/privacy-policy"
+                  className="rounded text-gray-400 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                >
+                  Privacy Notice
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/terms"
+                  className="rounded text-gray-400 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                >
+                  Terms of Use
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/disclaimer"
+                  className="rounded text-gray-400 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                >
+                  Health & Fitness Disclaimer
+                </Link>
+              </li>
             </ul>
           </nav>
         </div>
